@@ -436,9 +436,19 @@ class TradeOutcomeRecorder:
     ) -> Optional[Dict[str, Any]]:
         """Create trade outcome record."""
         try:
-            entry_price = trade_data["entry_price"]
-            entry_size = trade_data["entry_size"]
+            entry_price = Decimal(str(trade_data["entry_price"]))
+            entry_size = Decimal(str(trade_data["entry_size"]))
+            exit_size = Decimal(str(exit_size))
             side = trade_data["side"]
+            product = trade_data.get("product") or trade_data.get("product_id")
+            product_id = trade_data.get("product_id") or product
+            asset_pair = trade_data.get("asset_pair")
+            if not asset_pair and product_id:
+                try:
+                    from finance_feedback_engine.utils.product_id import product_id_to_asset_pair as _pid_to_pair
+                    asset_pair = _pid_to_pair(product_id)
+                except Exception:
+                    asset_pair = None
             
             # Calculate P&L based on side
             if side.upper() in ["BUY", "LONG"]:
@@ -469,14 +479,21 @@ class TradeOutcomeRecorder:
             if not close_decision_id and self._linkage_store:
                 try:
                     linkage = self._linkage_store.lookup(
-                        product_id=trade_data.get("product", ""),
+                        product_id=product_id or "",
                         side=trade_data.get("side", ""),
                     )
+                    linkage_source = "product_id"
+                    if not linkage and asset_pair:
+                        linkage = self._linkage_store.lookup_by_asset(
+                            asset_pair=asset_pair,
+                            side=trade_data.get("side", ""),
+                        )
+                        linkage_source = "asset_pair"
                     if linkage:
                         close_decision_id = linkage.get("decision_id")
                         logger.info(
-                            "Recovered decision_id %s for close outcome from linkage store (order=%s)",
-                            close_decision_id, linkage.get("order_id"),
+                            "Recovered decision_id %s for close outcome from linkage store via %s (order=%s)",
+                            close_decision_id, linkage_source, linkage.get("order_id"),
                         )
                 except Exception as e:
                     logger.debug("Linkage store consume failed: %s", e)
@@ -484,7 +501,10 @@ class TradeOutcomeRecorder:
             outcome = {
                 "trade_id": trade_data["trade_id"],
                 "decision_id": close_decision_id,
-                "product": trade_data["product"],
+                "product": product,
+                "product_id": product_id,
+                "asset_pair": asset_pair,
+                "recorded_via": trade_data.get("recorded_via") or "position_polling",
                 "side": side,
                 "entry_time": trade_data["entry_time"],
                 "entry_price": str(entry_price),

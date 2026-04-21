@@ -418,3 +418,85 @@ def test_learning_loop_recovery_shadow_uses_preserved_debate_attribution(tmp_pat
     assert provider_decisions["deepseek-r1:8b"]["action"] == "HOLD"
     assert actual_outcome == "SELL"
     assert isinstance(perf_metric, (int, float))
+
+
+def test_trade_outcome_recorder_persists_canonical_close_fields(tmp_path):
+    from finance_feedback_engine.monitoring.trade_outcome_recorder import TradeOutcomeRecorder
+
+    recorder = TradeOutcomeRecorder(data_dir=str(tmp_path), use_async=False)
+    outcome = {
+        "trade_id": "trade-1",
+        "decision_id": "decision-1",
+        "product": "ETH-USD",
+        "side": "LONG",
+        "entry_time": "2025-01-01T00:00:00+00:00",
+        "entry_price": "100.0",
+        "entry_size": "1.0",
+        "exit_time": "2025-01-01T01:00:00+00:00",
+        "exit_price": "110.0",
+        "exit_price_source": "test",
+        "exit_size": "1.0",
+        "realized_pnl": "10.0",
+        "fees": "0",
+        "holding_duration_seconds": 3600,
+        "roi_percent": "10.0",
+    }
+
+    recorder._save_outcome(outcome)
+
+    files = sorted((tmp_path / "trade_outcomes").glob("*.jsonl"))
+    assert len(files) == 1
+    rows = files[0].read_text().strip().splitlines()
+    assert len(rows) == 1
+
+    import json
+    saved = json.loads(rows[0])
+    assert saved["decision_id"] == "decision-1"
+    assert saved["exit_time"] == "2025-01-01T01:00:00+00:00"
+    assert "exit_timestamp" not in saved
+    assert "realized_pnl" in saved
+
+
+def test_trade_outcome_recorder_position_polling_close_persists_canonical_identity_and_source(tmp_path):
+    from finance_feedback_engine.monitoring.trade_outcome_recorder import TradeOutcomeRecorder
+
+    class LinkageStore:
+        def lookup(self, product_id, side):
+            return None
+
+        def lookup_by_asset(self, asset_pair, side):
+            if asset_pair == "BTCUSD" and side == "LONG":
+                return {"decision_id": "decision-poll-1", "order_id": "order-poll-1"}
+            return None
+
+    recorder = TradeOutcomeRecorder(data_dir=str(tmp_path), use_async=False)
+    recorder._linkage_store = LinkageStore()
+
+    recorder.open_positions = {
+        "BIP-20DEC30-CDE_LONG": {
+            "trade_id": "trade-poll-1",
+            "product": "BIP-20DEC30-CDE",
+            "side": "LONG",
+            "entry_time": "2025-01-01T00:00:00+00:00",
+            "entry_price": "100.0",
+            "entry_size": "1.0",
+            "last_price": "110.0",
+            "decision_id": None,
+        }
+    }
+
+    outcomes = recorder.update_positions([])
+    assert len(outcomes) == 1
+    outcome = outcomes[0]
+    assert outcome["product"] == "BIP-20DEC30-CDE"
+    assert outcome["product_id"] == "BIP-20DEC30-CDE"
+    assert outcome["asset_pair"] == "BTCUSD"
+    assert outcome["recorded_via"] == "position_polling"
+    assert outcome["decision_id"] == "decision-poll-1"
+
+    files = sorted((tmp_path / "trade_outcomes").glob("*.jsonl"))
+    saved = json.loads(files[0].read_text().strip().splitlines()[0])
+    assert saved["product_id"] == "BIP-20DEC30-CDE"
+    assert saved["asset_pair"] == "BTCUSD"
+    assert saved["recorded_via"] == "position_polling"
+    assert saved["decision_id"] == "decision-poll-1"
