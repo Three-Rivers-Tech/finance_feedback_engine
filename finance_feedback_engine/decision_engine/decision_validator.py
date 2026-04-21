@@ -548,10 +548,29 @@ class DecisionValidator:
             controls=controls,
         )
 
+        preserve_contract_effective_notional = (
+            entry_sizing_required
+            and is_crypto
+            and isinstance(policy_action, str)
+            and policy_action in {"OPEN_MEDIUM_LONG", "OPEN_MEDIUM_SHORT"}
+            and isinstance(policy_sizing_intent, dict)
+            and bool(policy_sizing_intent.get("provider_agnostic", False))
+            and sizing_anchor == "quarter_kelly_conservative"
+        )
+
         if entry_sizing_required and recommended_position_size:
-            recommended_position_size = float(recommended_position_size) * size_multiplier
-            if suggested_amount:
-                suggested_amount = float(suggested_amount) * size_multiplier
+            if preserve_contract_effective_notional:
+                logger.info(
+                    "Preserving contract-effective futures notional for %s on %s; size_multiplier=%.4f leaves suggested_amount=%.2f unchanged",
+                    policy_action,
+                    asset_pair,
+                    size_multiplier,
+                    float(suggested_amount or 0),
+                )
+            else:
+                recommended_position_size = float(recommended_position_size) * size_multiplier
+                if suggested_amount:
+                    suggested_amount = float(suggested_amount) * size_multiplier
 
         # Assemble decision object
         decision = {
