@@ -23,6 +23,7 @@ from .exceptions import (
 from .memory.portfolio_memory_adapter import PortfolioMemoryEngineAdapter
 from .monitoring.error_tracking import ErrorTracker
 from .monitoring.trade_outcome_recorder import TradeOutcomeRecorder
+from .monitoring.pending_linkage_store import PendingLinkageStore
 from .observability.metrics import create_counters, get_meter
 from .persistence.decision_store import DecisionStore
 from .config.provider_credentials import resolve_provider_credentials
@@ -439,9 +440,11 @@ class FinanceFeedbackEngine:
         outcome_recording_enabled = config.get("trade_outcome_recording", {}).get("enabled", True)
         if outcome_recording_enabled and not is_backtest:
             try:
+                pending_linkage_store = PendingLinkageStore(data_dir="data")
                 self.trade_outcome_recorder = TradeOutcomeRecorder(
                     data_dir="data",
-                    unified_provider=self.unified_provider
+                    unified_provider=self.unified_provider,
+                    pending_linkage_store=pending_linkage_store,
                 )
                 logger.info("Trade Outcome Recorder initialized with unified data provider")
                 
@@ -453,6 +456,7 @@ class FinanceFeedbackEngine:
                     outcome_recorder=self.trade_outcome_recorder,
                     data_dir="data",
                     poll_interval=30,
+                    pending_linkage_store=pending_linkage_store,
                 )
                 # Start the background worker
                 self.order_status_worker.start()
