@@ -562,19 +562,12 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
             "base_min_size",
         )
 
-        # Micro-start policy for BTC/ETH futures: begin at 1 contract-equivalent.
+        # Start from one contract-equivalent only as a floor, not a hard ceiling.
         target_base_size = Decimal("1")
         if base_min_size is not None and target_base_size < base_min_size:
             target_base_size = base_min_size
 
-        rounded_base = self._round_down_to_increment(target_base_size, base_increment)
-        if rounded_base <= 0:
-            rounded_base = base_increment
-
-        if base_min_size is not None and rounded_base < base_min_size:
-            rounded_base = base_min_size
-
-        # Conservative notional cap from decision budget to avoid oversizing.
+        # Budget-derived sizing should be allowed to scale above the micro-start floor.
         per_contract_notional = price_decimal * contract_multiplier
         if per_contract_notional > 0 and requested_size_usd_decimal > 0:
             notional_contracts = self._round_down_to_increment(
@@ -582,7 +575,14 @@ class CoinbaseAdvancedPlatform(BaseTradingPlatform):
                 base_increment,
             )
             if notional_contracts > 0:
-                rounded_base = min(rounded_base, notional_contracts)
+                target_base_size = max(target_base_size, notional_contracts)
+
+        rounded_base = self._round_down_to_increment(target_base_size, base_increment)
+        if rounded_base <= 0:
+            rounded_base = base_increment
+
+        if base_min_size is not None and rounded_base < base_min_size:
+            rounded_base = base_min_size
 
         if rounded_base <= 0:
             raise ValueError(

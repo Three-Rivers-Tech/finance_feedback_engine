@@ -3,6 +3,7 @@
 # =========================================================================
 
 import logging
+from decimal import Decimal
 
 class TestTargetedCoverageBranches:
     def test_format_product_id_unexpected_exception(self, platform, monkeypatch):
@@ -1204,6 +1205,28 @@ class TestExecuteTrade:
 
         assert result["success"] is False
         assert "product price" in result["error"]
+
+    def test_build_futures_base_size_scales_above_one_contract_when_budget_allows(self, platform):
+        product = MagicMock()
+        product.price = "50000"
+        product.base_increment = "1"
+        product.base_min_size = "1"
+        product.contract_size = "0.001"
+        product.product_type = "FUTURE"
+
+        decision = {
+            "id": "dec-futures-size",
+            "asset_pair": "BTCUSD",
+            "suggested_amount": 200.0,
+        }
+
+        base_size = platform._build_futures_base_size(
+            decision=decision,
+            product=product,
+            requested_size_usd_decimal=Decimal("200"),
+        )
+
+        assert float(base_size) == pytest.approx(4.0, rel=1e-6)
 
     def test_execute_trade_futures_rejection_path_not_quote_size(self, platform, mock_client):
         """Regression: futures order payload should avoid quote_size-only preview failures."""
