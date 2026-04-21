@@ -461,21 +461,6 @@ from unittest.mock import patch
 from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
 
 
-from unittest.mock import patch
-
-from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
-
-
-from unittest.mock import patch
-
-from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
-
-
-from unittest.mock import patch
-
-from finance_feedback_engine.risk.gatekeeper import RiskGatekeeper
-
-
 @patch("finance_feedback_engine.risk.gatekeeper.MarketSchedule")
 def test_gatekeeper_allows_futures_scale_in_when_margin_usage_implies_sub_limit_effective_leverage(
     mock_schedule,
