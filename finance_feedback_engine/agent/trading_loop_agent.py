@@ -3005,7 +3005,8 @@ class TradingLoopAgent:
 
                 try:
                     execution_result = await self.engine.execute_decision_async(
-                        decision_id
+                        decision_id,
+                        modified_decision=decision,
                     )
                     action = (
                         decision.get("policy_action")

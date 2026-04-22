@@ -2736,3 +2736,36 @@ def test_recover_decision_lineage_for_closed_outcome_skips_candidates_with_exist
     assert decision_id is None
     assert lineage_source == "no-hit"
     assert "decision_store.recovery_metadata_product" in attempted_sources
+
+
+@pytest.mark.asyncio
+async def test_execution_state_passes_modified_decision_for_derisking_metadata(trading_agent, mock_dependencies):
+    decision = {
+        "id": "decision-derisking-metadata",
+        "action": "REDUCE_LONG",
+        "policy_action": "REDUCE_LONG",
+        "asset_pair": "BTCUSD",
+        "entry_price": 6352.10,
+        "recommended_position_size": 1.0,
+        "suggested_amount": 6352.10,
+        "execution_metadata": {"execution_amount_usd": 6352.10},
+        "control_outcome": {"status": "proposed", "version": 1},
+        "policy_package": {"control_outcome": {"status": "proposed", "version": 1}, "version": 1},
+    }
+    async with trading_agent._current_decisions_lock:
+        trading_agent._current_decisions = [decision]
+    trading_agent.state = AgentState.EXECUTION
+
+    trading_agent.engine.execute_decision_async = AsyncMock(return_value={
+        "success": True,
+        "message": "order placed",
+        "order_id": "abc123",
+    })
+
+    await trading_agent.handle_execution_state()
+
+    trading_agent.engine.execute_decision_async.assert_awaited_once_with(
+        "decision-derisking-metadata",
+        modified_decision=decision,
+    )
+    assert decision["execution_status"] == "executed"
