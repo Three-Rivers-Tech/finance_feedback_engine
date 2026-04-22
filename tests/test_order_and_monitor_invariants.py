@@ -386,6 +386,42 @@ class TestOutcomeRecorderStateManagement:
         }])
         assert recorder.open_positions["BTC_SHORT"]["last_price"] == Decimal("67500")
 
+    def test_same_key_reopen_emits_old_outcome_and_resets_state(self, recorder):
+        recorder.open_positions = {
+            "BTC_SHORT": {
+                "trade_id": "t-old",
+                "product": "BTC",
+                "side": "SHORT",
+                "entry_time": "2026-04-22T20:00:00+00:00",
+                "entry_price": Decimal("68000"),
+                "entry_size": Decimal("1"),
+                "last_price": Decimal("67500"),
+                "decision_id": "d-old",
+            }
+        }
+
+        outcomes = recorder.update_positions([{
+            "product_id": "BTC",
+            "side": "SHORT",
+            "number_of_contracts": "1",
+            "current_price": "67000",
+            "entry_price": "67000",
+            "opened_at": "2026-04-22T20:05:00+00:00",
+            "decision_id": "d-new",
+        }])
+
+        assert len(outcomes) == 1
+        assert outcomes[0]["decision_id"] == "d-old"
+        assert Decimal(outcomes[0]["entry_price"]) == Decimal("68000")
+        assert Decimal(outcomes[0]["exit_price"]) == Decimal("67500")
+        assert Decimal(outcomes[0]["realized_pnl"]) == Decimal("500")
+        assert recorder.open_positions["BTC_SHORT"]["trade_id"] != "t-old"
+        assert recorder.open_positions["BTC_SHORT"]["decision_id"] == "d-new"
+        assert recorder.open_positions["BTC_SHORT"]["entry_time"] == "2026-04-22T20:05:00+00:00"
+        assert recorder.open_positions["BTC_SHORT"]["entry_price"] == Decimal("67000")
+        assert recorder.open_positions["BTC_SHORT"]["entry_size"] == Decimal("1")
+        assert recorder.open_positions["BTC_SHORT"]["last_price"] == Decimal("67000")
+
     def test_decision_id_enrichment(self, recorder):
         """If incoming position has decision_id but state doesn't, enrich it."""
         recorder.open_positions = {

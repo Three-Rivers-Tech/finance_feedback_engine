@@ -323,12 +323,97 @@ class TradeOutcomeRecorder:
             else:
                 # Keep most recent observed mark/current price for close-time fallback
                 state_changed = False
+                existing_state = self.open_positions[pos_key]
+                prior_last_price = Decimal(str(existing_state.get("last_price") or "0"))
                 if current_price > 0:
                     self.open_positions[pos_key]["last_price"] = current_price
                     state_changed = True
-                existing_size = self.open_positions[pos_key].get("entry_size")
+                existing_state = self.open_positions[pos_key]
+                existing_size = existing_state.get("entry_size")
                 existing_size_decimal = Decimal(str(existing_size)) if existing_size is not None else Decimal("0")
-                if size > 0 and (existing_size is None or existing_size_decimal <= 0):
+
+                incoming_entry_time = (
+                    pos.get("entry_time") or
+                    pos.get("opened_at") or
+                    pos.get("open_time") or
+                    pos.get("created_at") or
+                    pos.get("timestamp")
+                )
+                incoming_entry_price_raw = (
+                    pos.get("entry_price") or
+                    pos.get("average_price") or
+                    pos.get("price") or
+                    current_price
+                )
+                try:
+                    incoming_entry_price = Decimal(str(incoming_entry_price_raw))
+                except (ValueError, TypeError, InvalidOperation):
+                    incoming_entry_price = current_price
+
+                incoming_decision_id = normalize_scalar_id(pos.get("decision_id"))
+                existing_decision_id = normalize_scalar_id(existing_state.get("decision_id"))
+                existing_entry_time = existing_state.get("entry_time")
+                existing_entry_price = existing_state.get("entry_price")
+                try:
+                    existing_entry_price_decimal = (
+                        Decimal(str(existing_entry_price)) if existing_entry_price is not None else Decimal("0")
+                    )
+                except (ValueError, TypeError, InvalidOperation):
+                    existing_entry_price_decimal = Decimal("0")
+
+                same_key_reopen = (
+                    size > 0 and
+                    existing_size_decimal > 0 and
+                    incoming_entry_time and
+                    existing_entry_time and
+                    incoming_entry_time != existing_entry_time and
+                    incoming_entry_price > 0 and
+                    existing_entry_price_decimal > 0 and
+                    incoming_entry_price != existing_entry_price_decimal
+                )
+
+                if same_key_reopen:
+                    reopen_exit_price = prior_last_price
+                    if reopen_exit_price <= 0 and current_price > 0:
+                        reopen_exit_price = current_price
+                        reopen_exit_price_source = "state:current_price_same_key_reopen"
+                    else:
+                        reopen_exit_price_source = "state:last_price_same_key_reopen"
+
+                    if reopen_exit_price > 0:
+                        reopen_outcome = self._create_outcome(
+                            trade_data=existing_state,
+                            exit_time=now_utc,
+                            exit_price=reopen_exit_price,
+                            exit_size=existing_size_decimal,
+                            exit_price_source=reopen_exit_price_source,
+                        )
+                        if reopen_outcome:
+                            outcomes.append(reopen_outcome)
+                            logger.info(
+                                "Same-key reopen detected for %s: closed prior trade_id=%s decision_id=%s before resetting state",
+                                pos_key,
+                                existing_state.get("trade_id"),
+                                existing_decision_id,
+                            )
+                    else:
+                        logger.warning(
+                            "Same-key reopen detected for %s but no reliable prior exit price was available; resetting state without realized outcome",
+                            pos_key,
+                        )
+
+                    self.open_positions[pos_key] = {
+                        "trade_id": str(uuid.uuid4()),
+                        "product": product,
+                        "side": side,
+                        "entry_time": incoming_entry_time,
+                        "entry_price": incoming_entry_price,
+                        "entry_size": size,
+                        "last_price": current_price if current_price > 0 else incoming_entry_price,
+                        "decision_id": incoming_decision_id,
+                    }
+                    state_changed = True
+                elif size > 0 and (existing_size is None or existing_size_decimal <= 0):
                     logger.warning(
                         "Repairing zero/missing entry_size for %s from live position snapshot: %s",
                         pos_key,
@@ -365,10 +450,6 @@ class TradeOutcomeRecorder:
                         )
                     self.open_positions[pos_key]["entry_size"] = size
                     state_changed = True
-                incoming_decision_id = normalize_scalar_id(pos.get("decision_id"))
-                existing_decision_id = normalize_scalar_id(
-                    self.open_positions[pos_key].get("decision_id")
-                )
                 if incoming_decision_id and incoming_decision_id != existing_decision_id:
                     self.open_positions[pos_key]["decision_id"] = incoming_decision_id
                     state_changed = True
