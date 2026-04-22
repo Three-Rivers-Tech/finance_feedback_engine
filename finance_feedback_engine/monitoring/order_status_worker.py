@@ -287,12 +287,18 @@ class OrderStatusWorker:
                         lookup_path,
                     )
                     outcome = self._record_order_outcome(order_id, order_data, order_status)
+                    completed_orders.append(order_id)
                     if outcome:
-                        completed_orders.append(order_id)
                         logger.info(
                             "Recorded outcome for order %s: P&L %s | lookup_path=%s",
                             order_id,
                             outcome.get('realized_pnl', 'N/A'),
+                            lookup_path,
+                        )
+                    else:
+                        logger.warning(
+                            "Terminal order %s produced no outcome record; removing from pending to avoid stale/orphaned retention | lookup_path=%s",
+                            order_id,
                             lookup_path,
                         )
 
@@ -516,6 +522,16 @@ class OrderStatusWorker:
                     "fill_price": float(order_status.get("price", 0)),
                     "fees": 0,
                 }
+
+            completed_statuses = {"FILLED", "DONE", "COMPLETED", "CLOSED"}
+            status_value = str(order_status.get("status") or order_status.get("state") or "").upper()
+            if status_value in completed_statuses:
+                logger.warning(
+                    "Completed order missing authoritative fill fields; refusing stale fallback | status=%s order_id=%s",
+                    status_value,
+                    order_data.get("order_id") or order_data.get("decision_id") or "unknown",
+                )
+                return None
 
             return {
                 "filled_size": float(order_data.get("size", 0)),

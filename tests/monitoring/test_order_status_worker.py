@@ -444,3 +444,61 @@ def test_open_entry_fill_records_linkage_using_policy_action_family(tmp_path):
         "side": "SHORT",
         "product_id": "BIP-20DEC30-CDE",
     }]
+
+
+
+def test_completed_order_without_fill_fields_does_not_record_fabricated_outcome(tmp_path):
+    recorder = MagicMock()
+    worker = OrderStatusWorker(
+        trading_platform=MagicMock(),
+        outcome_recorder=recorder,
+        data_dir=str(tmp_path),
+        poll_interval=1,
+        flush_every_cycles=1,
+        max_stale_checks=20,
+    )
+
+    outcome = worker._record_order_outcome(
+        order_id="cb-missing-fill",
+        order_data={
+            "decision_id": "decision-missing-fill",
+            "asset_pair": "BTCUSD",
+            "action": "BUY",
+            "side": "LONG",
+            "size": "0.25",
+            "entry_price": "50000",
+            "timestamp": "2026-04-21T00:00:00+00:00",
+        },
+        order_status={
+            "status": "FILLED",
+            "product_id": "BIP-20DEC30-CDE",
+        },
+    )
+
+    assert outcome is None
+    recorder.record_order_outcome.assert_not_called()
+
+
+
+def test_terminal_completed_order_with_missing_outcome_is_removed_from_pending(tmp_path):
+    worker = _new_worker(tmp_path)
+    worker._get_order_status = MagicMock(return_value={
+        'status': 'FILLED',
+        '_lookup_path': 'test.platform',
+    })
+    worker._record_order_outcome = MagicMock(return_value=None)
+
+    worker.add_pending_order(
+        order_id='order-terminal-no-outcome',
+        decision_id='decision-terminal-no-outcome',
+        asset_pair='BTCUSD',
+        platform='coinbase',
+        action='BUY',
+        size=0.01,
+        entry_price=50000,
+    )
+
+    worker._check_pending_orders()
+
+    assert 'order-terminal-no-outcome' not in worker._pending_cache
+    worker._record_order_outcome.assert_called_once()
