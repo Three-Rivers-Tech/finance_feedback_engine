@@ -336,6 +336,34 @@ class TestOutcomeRecorderStateManagement:
         assert outcomes[0]["product"] == "BIP-20DEC30-CDE"
         assert Decimal(outcomes[0]["realized_pnl"]) == Decimal("500")  # SHORT profit
 
+    def test_partial_reduce_emits_outcome_and_shrinks_state(self, recorder):
+        recorder.open_positions = {
+            "BTC_SHORT": {
+                "trade_id": "t-partial",
+                "product": "BTC",
+                "side": "SHORT",
+                "entry_time": "2026-03-31T10:00:00+00:00",
+                "entry_price": Decimal("68000"),
+                "entry_size": Decimal("2"),
+                "last_price": Decimal("68000"),
+                "decision_id": "d-partial",
+            }
+        }
+
+        outcomes = recorder.update_positions([{
+            "product_id": "BTC",
+            "side": "SHORT",
+            "number_of_contracts": "1",
+            "current_price": "67500",
+        }])
+
+        assert len(outcomes) == 1
+        assert outcomes[0]["product"] == "BTC"
+        assert Decimal(outcomes[0]["exit_size"]) == Decimal("1")
+        assert Decimal(outcomes[0]["realized_pnl"]) == Decimal("500")
+        assert recorder.open_positions["BTC_SHORT"]["entry_size"] == Decimal("1")
+        assert recorder.open_positions["BTC_SHORT"]["last_price"] == Decimal("67500")
+
     def test_position_price_update_tracked(self, recorder):
         """last_price should update when position is still open."""
         recorder.open_positions = {

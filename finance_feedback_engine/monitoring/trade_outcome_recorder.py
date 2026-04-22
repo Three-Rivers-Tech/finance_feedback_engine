@@ -327,12 +327,42 @@ class TradeOutcomeRecorder:
                     self.open_positions[pos_key]["last_price"] = current_price
                     state_changed = True
                 existing_size = self.open_positions[pos_key].get("entry_size")
-                if size > 0 and (existing_size is None or Decimal(str(existing_size)) <= 0):
+                existing_size_decimal = Decimal(str(existing_size)) if existing_size is not None else Decimal("0")
+                if size > 0 and (existing_size is None or existing_size_decimal <= 0):
                     logger.warning(
                         "Repairing zero/missing entry_size for %s from live position snapshot: %s",
                         pos_key,
                         size,
                     )
+                    self.open_positions[pos_key]["entry_size"] = size
+                    state_changed = True
+                elif size > 0 and existing_size_decimal > 0 and size < existing_size_decimal:
+                    reduced_size = existing_size_decimal - size
+                    partial_exit_price = current_price if current_price > 0 else Decimal(str(self.open_positions[pos_key].get("last_price") or "0"))
+                    partial_exit_price_source = (
+                        "state:current_price_partial_reduce" if current_price > 0 else "state:last_price_partial_reduce"
+                    )
+                    if reduced_size > 0 and partial_exit_price > 0:
+                        partial_outcome = self._create_outcome(
+                            trade_data=self.open_positions[pos_key],
+                            exit_time=now_utc,
+                            exit_price=partial_exit_price,
+                            exit_size=reduced_size,
+                            exit_price_source=partial_exit_price_source,
+                        )
+                        if partial_outcome:
+                            outcomes.append(partial_outcome)
+                            logger.info(
+                                "Partial reduce detected for %s: exit_size=%s realized_pnl=%s",
+                                pos_key,
+                                reduced_size,
+                                partial_outcome.get("realized_pnl"),
+                            )
+                    else:
+                        logger.warning(
+                            "Detected partial reduce for %s but no reliable exit price was available; shrinking tracked size without realized outcome",
+                            pos_key,
+                        )
                     self.open_positions[pos_key]["entry_size"] = size
                     state_changed = True
                 incoming_decision_id = normalize_scalar_id(pos.get("decision_id"))
