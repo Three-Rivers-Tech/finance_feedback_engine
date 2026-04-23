@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from collections import Counter
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional
@@ -14,6 +14,19 @@ class ThresholdAvoidanceControls:
     high_volatility_threshold: float = 0.04
     high_volatility_min_confidence: float = 80.0
     near_threshold_window_pct: float = 5.0
+
+
+@dataclass(frozen=True)
+class DecisionLoadReport:
+    records: List[Dict[str, Any]] = field(default_factory=list)
+    scanned_files: int = 0
+    loaded_records: int = 0
+    skipped_unreadable_files: int = 0
+    skipped_invalid_json_files: int = 0
+    skipped_asset_pair_mismatch: int = 0
+    skipped_time_filtered: int = 0
+    unreadable_examples: List[str] = field(default_factory=list)
+    invalid_json_examples: List[str] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -30,7 +43,12 @@ class ThresholdAvoidanceSummary:
     judged_open_context_min_confidence_blocks: int
     suspicious_avoidance_ratio: float
     confidence_counts: Dict[str, int]
+    judged_open_confidence_counts: Dict[str, int]
+    near_threshold_confidence_counts: Dict[str, int]
     filtered_reason_counts: Dict[str, int]
+    dominant_judged_open_confidence: Optional[str]
+    dominant_judged_open_confidence_count: int
+    dominant_judged_open_confidence_share: float
     counterfactual: Dict[str, Dict[str, int]]
 
 
@@ -60,32 +78,77 @@ def _parse_timestamp(value: Any) -> Optional[datetime]:
         return None
 
 
-def load_decision_records(
+def load_decision_records_report(
     decision_dir: Path,
     asset_pair: Optional[str] = None,
     since_hours: Optional[int] = None,
-) -> List[Dict[str, Any]]:
+) -> DecisionLoadReport:
     now = datetime.now(timezone.utc)
     cutoff = now - timedelta(hours=since_hours) if since_hours else None
     records: List[Dict[str, Any]] = []
+    unreadable_examples: List[str] = []
+    invalid_json_examples: List[str] = []
+    scanned_files = 0
+    skipped_unreadable_files = 0
+    skipped_invalid_json_files = 0
+    skipped_asset_pair_mismatch = 0
+    skipped_time_filtered = 0
 
     for path in sorted(decision_dir.glob("*.json")):
+        scanned_files += 1
         try:
             payload = json.loads(path.read_text(encoding="utf-8"))
-        except Exception:
+        except PermissionError:
+            skipped_unreadable_files += 1
+            if len(unreadable_examples) < 5:
+                unreadable_examples.append(str(path))
+            continue
+        except OSError:
+            skipped_unreadable_files += 1
+            if len(unreadable_examples) < 5:
+                unreadable_examples.append(str(path))
+            continue
+        except json.JSONDecodeError:
+            skipped_invalid_json_files += 1
+            if len(invalid_json_examples) < 5:
+                invalid_json_examples.append(str(path))
             continue
 
         if asset_pair and str(payload.get("asset_pair") or "").upper() != asset_pair.upper():
+            skipped_asset_pair_mismatch += 1
             continue
 
         ts = _parse_timestamp(payload.get("timestamp"))
         if cutoff and ts and ts < cutoff:
+            skipped_time_filtered += 1
             continue
 
         payload["_source_path"] = str(path)
         records.append(payload)
 
-    return records
+    return DecisionLoadReport(
+        records=records,
+        scanned_files=scanned_files,
+        loaded_records=len(records),
+        skipped_unreadable_files=skipped_unreadable_files,
+        skipped_invalid_json_files=skipped_invalid_json_files,
+        skipped_asset_pair_mismatch=skipped_asset_pair_mismatch,
+        skipped_time_filtered=skipped_time_filtered,
+        unreadable_examples=unreadable_examples,
+        invalid_json_examples=invalid_json_examples,
+    )
+
+
+def load_decision_records(
+    decision_dir: Path,
+    asset_pair: Optional[str] = None,
+    since_hours: Optional[int] = None,
+) -> List[Dict[str, Any]]:
+    return load_decision_records_report(
+        decision_dir=decision_dir,
+        asset_pair=asset_pair,
+        since_hours=since_hours,
+    ).records
 
 
 def _is_judged_open(record: Dict[str, Any]) -> bool:
@@ -131,6 +194,8 @@ def analyze_threshold_avoidance(
     judged_open_regime_min_confidence_blocks = 0
     judged_open_context_min_confidence_blocks = 0
     confidence_counts: Counter[str] = Counter()
+    judged_open_confidence_counts: Counter[str] = Counter()
+    near_threshold_confidence_counts: Counter[str] = Counter()
     filtered_reason_counts: Counter[str] = Counter()
 
     rows = list(records)
@@ -158,6 +223,8 @@ def analyze_threshold_avoidance(
             continue
 
         judged_open_records += 1
+        if confidence:
+            judged_open_confidence_counts[str(confidence)] += 1
         if filtered_reason:
             judged_open_filtered_records += 1
         if volatility >= controls.high_volatility_threshold:
@@ -166,11 +233,26 @@ def analyze_threshold_avoidance(
         lower_bound = controls.judged_open_min_confidence_pct - controls.near_threshold_window_pct
         if lower_bound <= confidence < controls.judged_open_min_confidence_pct:
             near_threshold_judged_opens += 1
+            if confidence:
+                near_threshold_confidence_counts[str(confidence)] += 1
             if volatility >= controls.high_volatility_threshold:
                 high_volatility_near_threshold_judged_opens += 1
 
     suspicious_avoidance_ratio = (
         high_volatility_near_threshold_judged_opens / judged_open_records
+        if judged_open_records
+        else 0.0
+    )
+
+    dominant_judged_open_confidence = None
+    dominant_judged_open_confidence_count = 0
+    if judged_open_confidence_counts:
+        dominant_judged_open_confidence, dominant_judged_open_confidence_count = max(
+            judged_open_confidence_counts.items(),
+            key=lambda kv: (kv[1], -int(kv[0])),
+        )
+    dominant_judged_open_confidence_share = (
+        dominant_judged_open_confidence_count / judged_open_records
         if judged_open_records
         else 0.0
     )
@@ -210,10 +292,21 @@ def analyze_threshold_avoidance(
         judged_open_context_min_confidence_blocks=judged_open_context_min_confidence_blocks,
         suspicious_avoidance_ratio=round(suspicious_avoidance_ratio, 4),
         confidence_counts=dict(confidence_counts),
+        judged_open_confidence_counts=dict(judged_open_confidence_counts),
+        near_threshold_confidence_counts=dict(near_threshold_confidence_counts),
         filtered_reason_counts=dict(filtered_reason_counts),
+        dominant_judged_open_confidence=dominant_judged_open_confidence,
+        dominant_judged_open_confidence_count=dominant_judged_open_confidence_count,
+        dominant_judged_open_confidence_share=round(dominant_judged_open_confidence_share, 4),
         counterfactual=counterfactual,
     )
 
 
 def summary_to_dict(summary: ThresholdAvoidanceSummary) -> Dict[str, Any]:
     return asdict(summary)
+
+
+def load_report_to_dict(report: DecisionLoadReport) -> Dict[str, Any]:
+    payload = asdict(report)
+    payload.pop("records", None)
+    return payload

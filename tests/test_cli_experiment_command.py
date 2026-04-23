@@ -5,6 +5,7 @@ from unittest.mock import patch
 from click.testing import CliRunner
 
 from finance_feedback_engine.cli.main import cli
+from finance_feedback_engine.utils.threshold_avoidance import DecisionLoadReport
 
 
 class _FakeStudy:
@@ -88,5 +89,35 @@ def test_behavior_experiment_command_writes_output():
         files = sorted(Path("data/experiments").glob("behavior_experiment_*.json"))
         assert len(files) == 1
         payload = json.loads(files[0].read_text(encoding="utf-8"))
+        assert payload["load_report"]["loaded_records"] == 1
         assert payload["summary"]["judged_open_records"] == 1
+        assert payload["summary"]["judged_open_confidence_counts"] == {"75": 1}
         assert payload["summary"]["counterfactual"]["75"]["judged_open_passed"] == 1
+
+
+def test_behavior_experiment_command_fails_when_all_files_are_unreadable():
+    runner = CliRunner()
+    unreadable_report = DecisionLoadReport(
+        records=[],
+        scanned_files=2,
+        loaded_records=0,
+        skipped_unreadable_files=2,
+        unreadable_examples=["/tmp/a.json", "/tmp/b.json"],
+    )
+
+    with runner.isolated_filesystem():
+        out_dir = Path("data/decisions")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        with patch(
+            "finance_feedback_engine.cli.main.load_tiered_config", return_value={}
+        ), patch(
+            "finance_feedback_engine.cli.commands.behavior_experiment.load_decision_records_report",
+            return_value=unreadable_report,
+        ):
+            result = runner.invoke(
+                cli,
+                ["behavior-experiment", "--asset-pair", "BTCUSD", "--since-hours", "48"],
+            )
+
+    assert result.exit_code != 0
+    assert "unreadable_files=2" in result.output

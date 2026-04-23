@@ -11,7 +11,8 @@ from rich.console import Console
 from finance_feedback_engine.utils.threshold_avoidance import (
     ThresholdAvoidanceControls,
     analyze_threshold_avoidance,
-    load_decision_records,
+    load_decision_records_report,
+    load_report_to_dict,
     summary_to_dict,
 )
 
@@ -67,8 +68,23 @@ def behavior_experiment(
         near_threshold_window_pct=near_window,
     )
 
-    records = load_decision_records(decision_dir=decision_dir, asset_pair=asset_pair, since_hours=since_hours)
-    summary = analyze_threshold_avoidance(records, controls=controls, counterfactual_thresholds=thresholds)
+    load_report = load_decision_records_report(
+        decision_dir=decision_dir,
+        asset_pair=asset_pair,
+        since_hours=since_hours,
+    )
+    if load_report.loaded_records == 0 and load_report.skipped_unreadable_files > 0:
+        examples = ", ".join(load_report.unreadable_examples[:3])
+        raise click.ClickException(
+            "No decision records could be loaded because files were unreadable. "
+            f"unreadable_files={load_report.skipped_unreadable_files} examples=[{examples}]"
+        )
+
+    summary = analyze_threshold_avoidance(
+        load_report.records,
+        controls=controls,
+        counterfactual_thresholds=thresholds,
+    )
     payload = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "decision_dir": str(decision_dir),
@@ -80,6 +96,7 @@ def behavior_experiment(
             "high_volatility_min_confidence": high_vol_min_confidence,
             "near_threshold_window_pct": near_window,
         },
+        "load_report": load_report_to_dict(load_report),
         "summary": summary_to_dict(summary),
     }
 
@@ -95,10 +112,24 @@ def behavior_experiment(
     output_path.write_text(json.dumps(payload, indent=2, sort_keys=True), encoding="utf-8")
 
     console.print("[bold cyan]Behavior experiment[/bold cyan]")
-    console.print(f"records={summary.total_records} judged_opens={summary.judged_open_records} filtered={summary.judged_open_filtered_records}")
+    console.print(
+        f"records={summary.total_records} judged_opens={summary.judged_open_records} filtered={summary.judged_open_filtered_records}"
+    )
+    console.print(
+        "load="
+        f"scanned:{load_report.scanned_files} loaded:{load_report.loaded_records} unreadable:{load_report.skipped_unreadable_files} invalid_json:{load_report.skipped_invalid_json_files}"
+    )
     console.print(
         "near-threshold judged opens="
         f"{summary.near_threshold_judged_opens} | high-vol near-threshold={summary.high_volatility_near_threshold_judged_opens} | suspicious_ratio={summary.suspicious_avoidance_ratio:.2%}"
     )
+    console.print(
+        "dominant judged-open confidence="
+        f"{summary.dominant_judged_open_confidence} ({summary.dominant_judged_open_confidence_count}/{summary.judged_open_records}, {summary.dominant_judged_open_confidence_share:.2%})"
+    )
+    if load_report.skipped_unreadable_files > 0:
+        console.print(
+            f"[yellow]warning:[/yellow] unreadable_files={load_report.skipped_unreadable_files} examples={load_report.unreadable_examples}"
+        )
     console.print(f"counterfactual={summary.counterfactual}")
     console.print(f"saved={output_path}")
