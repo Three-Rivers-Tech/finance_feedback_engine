@@ -51,3 +51,42 @@ def test_experiment_command_writes_json_and_csv_outputs():
         payload = json.loads(json_files[0].read_text(encoding="utf-8"))
         assert payload["asset_pairs"] == ["BTCUSD"]
         assert payload["n_trials_per_asset"] == 2
+
+
+def test_behavior_experiment_command_writes_output():
+    runner = CliRunner()
+
+    with runner.isolated_filesystem():
+        out_dir = Path("data/decisions")
+        out_dir.mkdir(parents=True, exist_ok=True)
+        (out_dir / "sample.json").write_text(json.dumps({
+            "timestamp": "2026-04-23T14:59:22+00:00",
+            "asset_pair": "BTCUSD",
+            "decision_origin": "judge",
+            "action": "OPEN_MEDIUM_LONG",
+            "policy_action": "OPEN_MEDIUM_LONG",
+            "confidence": 75,
+            "volatility": 0.08,
+            "filtered_reason_code": "QUALITY_GATE_BLOCK"
+        }), encoding="utf-8")
+
+        with patch(
+            "finance_feedback_engine.cli.main.load_tiered_config", return_value={}
+        ):
+            result = runner.invoke(
+                cli,
+                [
+                    "behavior-experiment",
+                    "--asset-pair",
+                    "BTCUSD",
+                    "--since-hours",
+                    "48",
+                ],
+            )
+
+        assert result.exit_code == 0, result.output
+        files = sorted(Path("data/experiments").glob("behavior_experiment_*.json"))
+        assert len(files) == 1
+        payload = json.loads(files[0].read_text(encoding="utf-8"))
+        assert payload["summary"]["judged_open_records"] == 1
+        assert payload["summary"]["counterfactual"]["75"]["judged_open_passed"] == 1

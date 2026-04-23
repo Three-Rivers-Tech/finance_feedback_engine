@@ -41,6 +41,9 @@ from finance_feedback_engine.cli.commands.demo import demo as demo_command
 from finance_feedback_engine.cli.commands.experiment import (
     experiment as experiment_command,
 )
+from finance_feedback_engine.cli.commands.behavior_experiment import (
+    behavior_experiment as behavior_experiment_command,
+)
 from finance_feedback_engine.cli.commands.frontend import frontend as frontend_command
 from finance_feedback_engine.cli.commands.memory import (
     learning_report as learning_report_command,
@@ -2636,6 +2639,7 @@ cli.add_command(portfolio_backtest_command, name="portfolio-backtest")
 cli.add_command(walk_forward_command, name="walk-forward")
 cli.add_command(monte_carlo_command, name="monte-carlo")
 cli.add_command(experiment_command, name="experiment")
+cli.add_command(behavior_experiment_command, name="behavior-experiment")
 cli.add_command(optimize_command, name="optimize")
 cli.add_command(learning_report_command, name="learning-report")
 cli.add_command(prune_memory_command, name="prune-memory")
