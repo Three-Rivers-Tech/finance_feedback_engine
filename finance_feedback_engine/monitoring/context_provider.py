@@ -512,14 +512,41 @@ class MonitoringContextProvider:
                 "diversification_score": 0,
             }
 
-        # Calculate position sizes as % of portfolio and keep per-asset breakdown
+        # Calculate position sizes as % of portfolio and keep per-asset breakdown.
+        # For Coinbase futures margin accounts, normalize concentration against
+        # the account's initial margin usage rather than raw notional/account-equity.
+        # This keeps concentration on the same basis as the futures-aware leverage gate.
         position_sizes = []
         asset_position_pct: Dict[str, float] = {}
+        position_notionals = []
         for pos in futures_positions:
             notional = _estimate_position_notional_usd(pos)
             if notional <= 0:
                 continue
+            position_notionals.append((pos, notional))
+
+        total_notional = sum(notional for _, notional in position_notionals)
+        futures_summary = portfolio.get("futures_summary") or {}
+        if not futures_summary:
+            for pdata in (portfolio.get("platform_breakdowns") or {}).values():
+                if isinstance(pdata, dict) and pdata.get("futures_summary"):
+                    futures_summary = pdata.get("futures_summary") or {}
+                    break
+
+        initial_margin = _coerce_monitoring_float(
+            futures_summary.get("initial_margin") or portfolio.get("initial_margin"),
+            0.0,
+        )
+        total_margin_usage_pct = (
+            (initial_margin / total_value) * 100
+            if initial_margin > 0 and total_value > 0 and total_notional > 0
+            else 0.0
+        )
+
+        for pos, notional in position_notionals:
             pct = (notional / total_value) * 100
+            if total_margin_usage_pct > 0:
+                pct = (notional / total_notional) * total_margin_usage_pct
             position_sizes.append(pct)
             for asset_key in _position_asset_keys(pos):
                 asset_position_pct[asset_key] = max(asset_position_pct.get(asset_key, 0.0), pct)

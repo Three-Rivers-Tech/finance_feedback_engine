@@ -1,3 +1,5 @@
+import pytest
+
 from finance_feedback_engine.monitoring.context_provider import (
     MonitoringContextProvider,
     _estimate_position_notional_usd,
@@ -86,6 +88,35 @@ def test_asset_scoped_filter_matches_cfm_btc_product_to_btcusd():
 
     assert len(context["active_positions"]["futures"]) == 1
     assert context["active_positions"]["futures"][0]["product_id"] == "BIP-20DEC30-CDE"
+
+
+def test_analyze_concentration_uses_margin_usage_basis_for_coinbase_futures():
+    provider = MonitoringContextProvider(_DummyPlatform())
+    portfolio = {
+        "total_value_usd": 235.90,
+        "platform_breakdowns": {
+            "coinbase": {
+                "futures_summary": {
+                    "initial_margin": 75.00,
+                    "total_balance_usd": 235.90,
+                },
+                "futures_positions": [
+                    {
+                        "product_id": "BIP-20DEC30-CDE",
+                        "side": "LONG",
+                        "contracts": 1,
+                        "current_price": 78575.0,
+                    }
+                ],
+            }
+        },
+    }
+
+    concentration = provider._analyze_concentration(portfolio)
+
+    assert concentration["asset_position_pct"]["BTCUSD"] == pytest.approx(31.7931326833404)
+    assert concentration["largest_position_pct"] == pytest.approx(31.7931326833404)
+    assert concentration["largest_position_pct"] < 100.0
 
 
 def test_monitoring_context_includes_portfolio_breakdown_for_risk_gate_boundary():
