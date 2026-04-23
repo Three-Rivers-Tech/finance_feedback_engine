@@ -1,7 +1,9 @@
 """Tests for persistence.decision_store module."""
 
+import json
 import uuid
 
+from finance_feedback_engine.decision_engine.sortino_gate import SortinoGateResult
 from finance_feedback_engine.persistence.decision_store import (
     DECISION_SCHEMA_VERSION,
     DecisionStore,
@@ -386,6 +388,67 @@ class TestDecisionStoreNormalizationHelpers:
         assert normalized["candidate_action_scores"] == {"HOLD": 61.0}
         assert normalized["policy_trace"]["learning_metadata"]["policy_family"] == "baseline_ffe"
         assert normalized["policy_trace"]["learning_metadata"]["candidate_action_scores"] == {"HOLD": 61.0}
+
+    def test_normalize_decision_record_converts_sortino_gate_result_to_dict(self):
+        gate = SortinoGateResult(
+            weighted_sortino=0.82,
+            window_sortinos={10: 0.5, 30: 1.1},
+            kelly_multiplier=0.25,
+            sizing_mode="quarter_kelly",
+            reason="sortino positive",
+            trade_count=42,
+            short_window_veto=False,
+            windows_used=2,
+        )
+
+        normalized = normalize_decision_record(
+            {
+                "decision_id": str(uuid.uuid4()),
+                "asset_pair": "BTCUSD",
+                "action": "BUY",
+                "confidence": 72,
+                "sortino_gate_result": gate,
+            }
+        )
+
+        assert normalized["sortino_gate_result"] == {
+            "weighted_sortino": 0.82,
+            "window_sortinos": {"10": 0.5, "30": 1.1},
+            "kelly_multiplier": 0.25,
+            "sizing_mode": "quarter_kelly",
+            "reason": "sortino positive",
+            "trade_count": 42,
+            "short_window_veto": False,
+            "windows_used": 2,
+        }
+
+    def test_save_decision_persists_sortino_gate_result_as_json(self, tmp_path):
+        store = DecisionStore({"storage_path": str(tmp_path / "decisions")})
+        decision_id = str(uuid.uuid4())
+
+        store.save_decision(
+            {
+                "id": decision_id,
+                "asset_pair": "BTCUSD",
+                "action": "BUY",
+                "confidence": 72,
+                "sortino_gate_result": SortinoGateResult(
+                    weighted_sortino=0.82,
+                    window_sortinos={10: 0.5, 30: 1.1},
+                    kelly_multiplier=0.25,
+                    sizing_mode="quarter_kelly",
+                    reason="sortino positive",
+                    trade_count=42,
+                    short_window_veto=False,
+                    windows_used=2,
+                ),
+            }
+        )
+
+        saved_path = next((tmp_path / "decisions").glob(f"*_{decision_id}.json"))
+        payload = json.loads(saved_path.read_text())
+        assert payload["sortino_gate_result"]["sizing_mode"] == "quarter_kelly"
+        assert payload["sortino_gate_result"]["kelly_multiplier"] == 0.25
 
     def test_normalize_decision_record_creates_policy_trace_for_legacy_buy_shape(self):
         decision_id = str(uuid.uuid4())

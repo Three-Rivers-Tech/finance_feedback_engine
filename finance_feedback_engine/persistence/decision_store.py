@@ -1,6 +1,7 @@
 """Persistence layer for storing trading decisions."""
 
 import logging
+from dataclasses import asdict, is_dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Dict, List, Optional
@@ -326,9 +327,20 @@ def _ensure_learning_metadata(normalized: Dict[str, Any]) -> Dict[str, Any]:
     return normalized
 
 
+def _json_safe_decision_value(value: Any) -> Any:
+    """Convert dataclass-heavy decision payloads into JSON-safe values."""
+    if is_dataclass(value):
+        return _json_safe_decision_value(asdict(value))
+    if isinstance(value, dict):
+        return {str(key): _json_safe_decision_value(item) for key, item in value.items()}
+    if isinstance(value, (list, tuple, set)):
+        return [_json_safe_decision_value(item) for item in value]
+    return value
+
+
 def normalize_decision_record(decision: Dict[str, Any]) -> Dict[str, Any]:
     """Normalize persisted decision records to one canonical write/read shape."""
-    normalized = dict(decision or {})
+    normalized = _json_safe_decision_value(dict(decision or {}))
     decision_id = normalize_decision_id(normalized)
     if decision_id:
         normalized["id"] = decision_id
