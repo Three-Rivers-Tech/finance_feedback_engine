@@ -151,6 +151,26 @@ def _derive_execution_intent(
     }
 
 
+def _is_non_actionable_decision(decision: Dict[str, Any]) -> bool:
+    """Classify final non-execution outcomes without losing raw-action intent."""
+    if not isinstance(decision, dict):
+        return False
+
+    actionable = decision.get("actionable")
+    if actionable is False:
+        return True
+    if actionable is True:
+        return False
+
+    execution_status = decision.get("execution_status")
+    if execution_status in {"filtered", "hold", "no_action"}:
+        return True
+    if execution_status in {"executed", "execution_failed"}:
+        return False
+
+    return not _derive_execution_intent(decision)["is_actionable"]
+
+
 class AgentState(Enum):
     """Represents the current state of the trading agent."""
 
@@ -2505,8 +2525,7 @@ class TradingLoopAgent:
                 [
                     1
                     for _, decision in ordered_results
-                    if decision
-                    and not _derive_execution_intent(decision)["is_actionable"]
+                    if decision and _is_non_actionable_decision(decision)
                 ]
             ),
             max(0, len(asset_pairs_snapshot) - len(pairs_to_analyze)),

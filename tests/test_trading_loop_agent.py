@@ -2566,7 +2566,32 @@ async def test_process_cycle_logs_reasoning_cycle_summary(trading_agent, mock_de
 
     assert "Reasoning cycle summary | analyzed_pairs=[(0, 'BTCUSD')]" in caplog.text
     assert "actionable_count=0" in caplog.text
+    assert "non_actionable_count=1" in caplog.text
 
+
+@pytest.mark.asyncio
+async def test_process_cycle_logs_filtered_judged_open_as_non_actionable(trading_agent, mock_dependencies, caplog):
+    mock_dependencies["engine"].get_portfolio_breakdown_async = AsyncMock(return_value={})
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "id": "decision-filtered-open-1",
+            "action": "OPEN_SMALL_LONG",
+            "policy_action": "OPEN_SMALL_LONG",
+            "confidence": 75,
+            "asset_pair": "BTCUSD",
+            "decision_origin": "judge",
+            "market_regime": "ranging",
+            "reasoning": "Weak judged open should be filtered.",
+        }
+    )
+    trading_agent.is_running = True
+
+    with caplog.at_level(logging.INFO):
+        await trading_agent.process_cycle()
+
+    assert "Reasoning cycle summary | analyzed_pairs=[(0, 'BTCUSD')]" in caplog.text
+    assert "actionable_count=0" in caplog.text
+    assert "non_actionable_count=1" in caplog.text
 
 
 @pytest.mark.asyncio
