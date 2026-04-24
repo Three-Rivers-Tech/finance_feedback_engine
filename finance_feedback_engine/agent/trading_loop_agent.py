@@ -2221,7 +2221,15 @@ class TradingLoopAgent:
                 if pair
             }
         margin_usage_pct = 0.0
-        margin_usage_limit_pct = 0.50
+        # Plane #66: keep same-direction BTC/ETH scale-in allowance tied to the
+        # configured concentration budget instead of a stale hard-coded threshold.
+        safety_config = self.engine.config.get("safety", {})
+        try:
+            margin_usage_limit_pct = max(
+                0.0, float(safety_config.get("max_position_pct", 25.0)) / 100.0
+            )
+        except (TypeError, ValueError):
+            margin_usage_limit_pct = 0.25
         try:
             portfolio_snapshot = await self.engine.get_portfolio_breakdown_async()
             candidate_positions = []
@@ -2393,7 +2401,8 @@ class TradingLoopAgent:
                     existing_side = open_position_side.get(decision_pair)
 
                     if existing_side == requested_side:
-                        # Allow same-direction scaling on BTC/ETH futures rails until margin usage reaches 50%.
+                        # Allow same-direction scaling on BTC/ETH futures rails only while
+                        # current margin usage remains below the configured concentration cap.
                         if (
                             decision_pair in {"BTCUSD", "ETHUSD"}
                             and margin_usage_pct < margin_usage_limit_pct

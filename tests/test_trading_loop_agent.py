@@ -1593,6 +1593,56 @@ async def test_process_cycle_logs_portfolio_risk_snapshot_for_managed_positions(
 
 
 
+@pytest.mark.asyncio
+async def test_process_cycle_blocks_scale_in_above_configured_concentration_limit(trading_agent, mock_dependencies, caplog):
+    mock_dependencies["engine"].config = {"safety": {"max_position_pct": 25.0}}
+    mock_dependencies["engine"].get_portfolio_breakdown_async = AsyncMock(
+        return_value={
+            "platform_breakdowns": {
+                "coinbase": {
+                    "futures_positions": [
+                        {
+                            "product_id": "BIP-20DEC30-CDE",
+                            "side": "LONG",
+                            "number_of_contracts": "1",
+                        }
+                    ],
+                    "futures_summary": {
+                        "total_balance_usd": 231.43,
+                        "buying_power": 146.23,
+                        "unrealized_pnl": -1.15,
+                        "initial_margin": 78.94,
+                    },
+                }
+            }
+        }
+    )
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "id": "decision-1",
+            "action": "ADD_SMALL_LONG",
+            "confidence": 85,
+            "asset_pair": "BTCUSD",
+            "ensemble_metadata": {
+                "role_decisions": {
+                    "bull": {"action": "ADD_SMALL_LONG", "confidence": 85, "provider": "gemma4:e2b"},
+                    "bear": {"action": "HOLD", "confidence": 65, "provider": "llama3.1:8b"},
+                    "judge": {"action": "ADD_SMALL_LONG", "confidence": 85, "provider": "deepseek-r1:8b"},
+                }
+            },
+        }
+    )
+    trading_agent.is_running = True
+
+    with caplog.at_level(logging.INFO):
+        await trading_agent.process_cycle()
+
+    assert "margin_usage=34.11% (limit 25.00%)" in caplog.text
+    assert "Skipping ADD_SMALL_LONG for BTCUSD: LONG position already exists (duplicate-entry guard)." in caplog.text
+    assert "Actionable decision collected for BTCUSD: ADD_SMALL_LONG" not in caplog.text
+
+
+
 def test_derisking_execution_metadata_uses_active_position_size(trading_agent):
     decision = {
         "asset_pair": "ETHUSD",
