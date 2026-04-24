@@ -854,3 +854,29 @@ async def test_start_time_property(agent):
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
+
+
+@pytest.mark.asyncio
+async def test_recovery_no_positions_skips_stale_outcome_without_decision_id_and_logs_warning(agent, mock_engine, caplog):
+    """Startup recovery should not hand off stale outcomes with missing decision_id silently."""
+    import logging
+
+    mock_engine.get_portfolio_breakdown_async.return_value = {
+        "futures_positions": [],
+        "positions": [],
+    }
+    mock_engine.trade_outcome_recorder.update_positions.return_value = [
+        {
+            "decision_id": None,
+            "product": "ETH-USD",
+            "exit_price": "2010.0",
+            "exit_time": "2026-03-23T20:00:00Z",
+            "realized_pnl": "-12.5",
+        }
+    ]
+
+    with caplog.at_level(logging.WARNING):
+        await agent.handle_recovering_state()
+
+    mock_engine.record_trade_outcome.assert_not_called()
+    assert "missing decision_id" in caplog.text.lower() or "missing_decision_id" in caplog.text.lower()
