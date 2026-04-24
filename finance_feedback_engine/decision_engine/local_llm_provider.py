@@ -765,6 +765,7 @@ class LocalLLMProvider:
                         "candidate_actions (JSON array of seriously considered allowed policy actions, with candidate_actions[0] equal to policy_action), "
                         "confidence (0-100 integer), reasoning (brief explanation string), amount (decimal number for position size). "
                         "Never omit policy_action or candidate_actions for debate requests. "
+                        "Calibrate confidence honestly: 80-89 means strong actionable setup that should clear strict judged-open gates; 70-79 means borderline and below the strict entry bar; do not use 75 as a generic synonym for high confidence. "
                         "Never output an action outside the allowed policy-action list in the prompt.\n\n"
                         f"{prompt}"
                     )

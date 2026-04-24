@@ -38,6 +38,28 @@ def test_query_logs_request_label_and_honors_timeout_override(caplog):
     assert "generate_s=" in caplog.text
 
 
+def test_debate_query_wrapper_includes_confidence_calibration_contract():
+    provider = LocalLLMProvider.__new__(LocalLLMProvider)
+    provider.config = {"decision_engine": {"max_retries": 1, "default_position_size": 0.1}, "api_timeouts": {"llm_query": 120}}
+    provider.model_name = "mistral:latest"
+    provider.ollama_client = DummyClient()
+    provider.ensure_connection = lambda: None
+    provider._unload_model = lambda: None
+
+    LocalLLMProvider.query(
+        provider,
+        "Allowed Policy Actions: HOLD, OPEN_SMALL_LONG",
+        request_label="debate:judge",
+        request_timeout_s=7,
+    )
+
+    prompt = provider.ollama_client.kwargs["prompt"]
+    assert "Calibrate confidence honestly:" in prompt
+    assert "80-89 means strong actionable setup that should clear strict judged-open gates" in prompt
+    assert "70-79 means borderline and below the strict entry bar" in prompt
+    assert "do not use 75 as a generic synonym for high confidence" in prompt
+
+
 class SequencedJudgeClient:
     def __init__(self):
         self.calls = 0

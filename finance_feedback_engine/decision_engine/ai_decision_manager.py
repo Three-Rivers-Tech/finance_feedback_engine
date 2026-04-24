@@ -537,6 +537,15 @@ JSON requirements:
 - in that flat/ranging entry case, include at least one plausible alternative legal action in candidate_actions (usually HOLD, or another legal entry if genuinely considered)
 - only return a singleton candidate_actions array when there was truly just one plausible legal action after evaluating the bull and bear cases, and never for flat/ranging non-HOLD entry decisions
 
+Confidence calibration:
+- 90-100 = rare, exceptionally strong, highly corroborated setup with clear execution edge
+- 80-89 = strong actionable setup that should clear strict judged-open execution gates
+- 70-79 = borderline or incomplete setup; below the intended strict judged-open entry bar
+- 60-69 = weak/speculative lean; monitor is usually better than acting now
+- 0-59 = non-actionable, degraded, stale, or HOLD-quality setup
+- For flat-position OPEN_* entry decisions, confidence should usually be below 80 unless the evidence clearly clears the stricter execution bar.
+- Do not use 75 as a generic synonym for "high confidence".
+
 In reasoning, use this exact mini-structure:
 Winning Thesis: <bull|bear|neither>
 Decision Basis: <main factor that decided the outcome>
@@ -791,6 +800,14 @@ JSON requirements:
 - candidate_actions[0] must equal policy_action
 - if the decision is HOLD, still include the strongest alternative action considered when one exists
 
+Confidence calibration:
+- 90-100 = rare, exceptionally strong, highly corroborated setup with clear execution edge
+- 80-89 = strong actionable setup that should clear strict judged-open execution gates
+- 70-79 = borderline or incomplete setup; below the intended strict judged-open entry bar
+- 60-69 = weak/speculative lean; monitor is usually better than acting now
+- 0-59 = non-actionable, degraded, stale, or HOLD-quality setup
+- Do not use 75 as a generic synonym for "high confidence".
+
 In reasoning, use this exact mini-structure, keeping each line short and concrete:
 Thesis: <one short bullish thesis>
 Actionability: <actionable_now|monitor|no_trade>
@@ -834,6 +851,14 @@ JSON requirements:
 - candidate_actions must include policy_action
 - candidate_actions[0] must equal policy_action
 - if the decision is HOLD, still include the strongest alternative action considered when one exists
+
+Confidence calibration:
+- 90-100 = rare, exceptionally strong, highly corroborated setup with clear execution edge
+- 80-89 = strong actionable setup that should clear strict judged-open execution gates
+- 70-79 = borderline or incomplete setup; below the intended strict judged-open entry bar
+- 60-69 = weak/speculative lean; monitor is usually better than acting now
+- 0-59 = non-actionable, degraded, stale, or HOLD-quality setup
+- Do not use 75 as a generic synonym for "high confidence".
 
 In reasoning, use this exact mini-structure, keeping each line short and concrete:
 Thesis: <one short bearish thesis>

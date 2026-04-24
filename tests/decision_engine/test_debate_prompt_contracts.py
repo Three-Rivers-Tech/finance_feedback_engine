@@ -15,7 +15,7 @@ def test_debate_prompts_include_structured_reasoning_contracts():
 
     async def fake_query(provider, prompt, request_label=None, request_timeout_s=None):
         prompts.append((provider, prompt))
-        return {"action": "HOLD", "confidence": 50, "reasoning": "ok", "amount": 0}
+        return {"action": "HOLD", "policy_action": "HOLD", "candidate_actions": ["HOLD"], "confidence": 50, "reasoning": "ok", "amount": 0}
 
     manager._query_single_provider = fake_query
 
@@ -34,6 +34,8 @@ def test_debate_prompts_include_structured_reasoning_contracts():
     assert 'Trend Alignment:' in bull_prompt
     assert 'Top Evidence:' in bull_prompt
     assert 'Data Quality:' in bull_prompt
+    assert 'Confidence calibration:' in bull_prompt
+    assert 'Do not use 75 as a generic synonym for "high confidence".' in bull_prompt
 
     assert 'Thesis:' in bear_prompt
     assert 'Actionability:' in bear_prompt
@@ -52,6 +54,10 @@ def test_debate_prompts_include_structured_reasoning_contracts():
     assert 'Why Not Bear:' in judge_prompt
     assert 'Data Quality:' in judge_prompt
     assert 'Missing Evidence:' in judge_prompt
+    assert 'Confidence calibration:' in judge_prompt
+    assert '80-89 = strong actionable setup that should clear strict judged-open execution gates' in judge_prompt
+    assert '70-79 = borderline or incomplete setup; below the intended strict judged-open entry bar' in judge_prompt
+    assert 'Do not use 75 as a generic synonym for "high confidence".' in judge_prompt
 
 
 def test_ai_decision_manager_debate_prompts_are_role_distinct():
@@ -63,7 +69,7 @@ def test_ai_decision_manager_debate_prompts_are_role_distinct():
 
     async def fake_query(provider, prompt, request_label=None, request_timeout_s=None):
         prompts.append((provider, prompt))
-        return {"action": "HOLD", "confidence": 50, "reasoning": "ok", "amount": 0}
+        return {"action": "HOLD", "policy_action": "HOLD", "candidate_actions": ["HOLD"], "confidence": 50, "reasoning": "ok", "amount": 0}
 
     manager._query_single_provider = fake_query
 
@@ -91,7 +97,7 @@ def test_decision_engine_debate_prompts_should_be_role_distinct():
 
     async def fake_query(provider, prompt, request_label=None, request_timeout_s=None):
         prompts.append((provider, prompt))
-        return {"action": "HOLD", "confidence": 50, "reasoning": "ok", "amount": 0}
+        return {"action": "HOLD", "policy_action": "HOLD", "candidate_actions": ["HOLD"], "confidence": 50, "reasoning": "ok", "amount": 0}
 
     engine._query_single_provider = fake_query
 
@@ -465,7 +471,7 @@ def test_debate_prompts_respect_long_position_action_constraints():
 
     async def fake_query(provider, prompt, request_label=None, request_timeout_s=None):
         prompts.append((provider, prompt))
-        return {"action": "HOLD", "confidence": 50, "reasoning": "ok", "amount": 0}
+        return {"action": "HOLD", "policy_action": "HOLD", "candidate_actions": ["HOLD"], "confidence": 50, "reasoning": "ok", "amount": 0}
 
     manager._query_single_provider = fake_query
 
@@ -509,7 +515,7 @@ def test_debate_prompts_respect_short_position_action_constraints():
 
     async def fake_query(provider, prompt, request_label=None, request_timeout_s=None):
         prompts.append((provider, prompt))
-        return {"action": "HOLD", "confidence": 50, "reasoning": "ok", "amount": 0}
+        return {"action": "HOLD", "policy_action": "HOLD", "candidate_actions": ["HOLD"], "confidence": 50, "reasoning": "ok", "amount": 0}
 
     manager._query_single_provider = fake_query
 
