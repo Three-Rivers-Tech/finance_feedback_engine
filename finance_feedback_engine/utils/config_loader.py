@@ -153,7 +153,7 @@ def _normalize_platform_config(config: Dict[str, Any]) -> None:
 
     if trading_platform == "unified" and _is_crypto_only_watchlist(config):
         normalized_platforms = [
-            p for p in normalized_platforms if str(p.get("name", "")).lower() in {"coinbase", "coinbase_advanced"}
+            p for p in normalized_platforms if str(p.get("name", "")).lower() in {"coinbase", "coinbase_advanced", "paper", "mock", "sandbox"}
         ]
         providers = config.get("providers") or {}
         if isinstance(providers, dict) and "oanda" in providers:
@@ -385,34 +385,57 @@ def load_env_config() -> Dict[str, Any]:
         "use_sandbox": _env_bool("COINBASE_USE_SANDBOX", False),
     }
 
-    # Phase 3: Only Coinbase + Oanda platforms (paper platform disabled)
-    # Crypto (BTC/ETH) → Coinbase sandbox
-    # Forex (GBP/EUR) → Oanda practice
-    config["platforms"] = [
-        # Paper platform commented out for Phase 3 deployment
-        # {
-        #     "name": "paper",
-        #     "credentials": {
-        #         "initial_cash_usd": _env_float("PAPER_INITIAL_CASH_USD", 10000.0),
-        #     },
-        # },
-        {
-            "name": "coinbase_advanced",
-            "credentials": {
-                "api_key": _env_str("COINBASE_API_KEY", ""),
-                "api_secret": _env_str("COINBASE_API_SECRET", ""),
-                "use_sandbox": _env_bool("COINBASE_USE_SANDBOX", False),
-            },
-        },
-        {
-            "name": "oanda",
-            "credentials": {
-                "api_key": _env_str("OANDA_API_KEY", ""),
-                "account_id": _env_str("OANDA_ACCOUNT_ID", ""),
-                "environment": _env_str("OANDA_ENVIRONMENT", "practice"),
-            },
-        },
-    ]
+    paper_trading_enabled = _env_bool("PAPER_TRADING_ENABLED", False)
+    paper_trading_only = _env_bool("PAPER_TRADING_ONLY", False)
+    paper_initial_cash = _env_float("PAPER_INITIAL_CASH_USD", 10000.0)
+
+    config["paper_trading"] = {
+        "enabled": paper_trading_enabled,
+        "simulate_execution": paper_trading_enabled,
+        "verify_outcomes": True,
+    }
+    config["paper_trading_defaults"] = {
+        "enabled": paper_trading_enabled,
+        "initial_cash_usd": paper_initial_cash,
+    }
+    config["features"] = {
+        "paper_trading_mode": paper_trading_enabled,
+    }
+
+    platforms = []
+    if paper_trading_enabled:
+        platforms.append(
+            {
+                "name": "paper",
+                "credentials": {
+                    "initial_cash_usd": paper_initial_cash,
+                },
+            }
+        )
+
+    if not paper_trading_only:
+        platforms.extend(
+            [
+                {
+                    "name": "coinbase_advanced",
+                    "credentials": {
+                        "api_key": _env_str("COINBASE_API_KEY", ""),
+                        "api_secret": _env_str("COINBASE_API_SECRET", ""),
+                        "use_sandbox": _env_bool("COINBASE_USE_SANDBOX", False),
+                    },
+                },
+                {
+                    "name": "oanda",
+                    "credentials": {
+                        "api_key": _env_str("OANDA_API_KEY", ""),
+                        "account_id": _env_str("OANDA_ACCOUNT_ID", ""),
+                        "environment": _env_str("OANDA_ENVIRONMENT", "practice"),
+                    },
+                },
+            ]
+        )
+
+    config["platforms"] = platforms
 
     # Structured provider credentials
     config["providers"] = {

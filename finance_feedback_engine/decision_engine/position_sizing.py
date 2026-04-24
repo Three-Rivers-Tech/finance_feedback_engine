@@ -237,8 +237,13 @@ class PositionSizingCalculator:
                 if fallback_val is None:
                     pb = context.get("portfolio") or {}
                     if isinstance(pb, dict):
-                        cb = (pb.get("platform_breakdowns") or {}).get("coinbase") or {}
-                        fs = cb.get("futures_summary") or {}
+                        fs = pb.get("futures_summary") or {}
+                        if not fs:
+                            active_breakdown = pb.get("active_platform_breakdown") or {}
+                            fs = active_breakdown.get("futures_summary") or {}
+                        if not fs:
+                            cb = (pb.get("platform_breakdowns") or {}).get("coinbase") or {}
+                            fs = cb.get("futures_summary") or {}
                         for k in ("buying_power", "total_balance_usd"):
                             v = fs.get(k)
                             try:

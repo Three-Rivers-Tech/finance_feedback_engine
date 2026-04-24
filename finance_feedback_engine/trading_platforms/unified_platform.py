@@ -102,6 +102,61 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         if not self.platforms:
             raise ValueError("No platforms were configured for UnifiedTradingPlatform.")
 
+        self._paper_execution_enabled = self._is_paper_execution_enabled()
+
+    def _is_paper_execution_enabled(self) -> bool:
+        """Return True when config explicitly enables paper/mock execution routing."""
+        paper_defaults = (self.config.get("paper_trading_defaults") or {})
+        paper_cfg = (self.config.get("paper_trading") or {})
+        feature_flags = (self.config.get("features") or {})
+        return bool(
+            paper_defaults.get("enabled")
+            or paper_cfg.get("enabled")
+            or feature_flags.get("paper_trading_mode")
+        )
+
+    def _resolve_target_platform_name(self, asset_class: str) -> str | None:
+        """Pick the execution venue for a decision."""
+        if self._paper_execution_enabled and "paper" in self.platforms:
+            return "paper"
+
+        if asset_class == "crypto":
+            return "coinbase" if "coinbase" in self.platforms else ("paper" if "paper" in self.platforms else None)
+        if asset_class == "forex":
+            return "oanda" if "oanda" in self.platforms else ("paper" if "paper" in self.platforms else None)
+
+        return "paper" if "paper" in self.platforms and self._paper_execution_enabled else None
+
+    def _resolve_active_execution_platform_name(self) -> str | None:
+        """Return the platform name that portfolio/risk consumers should treat as active."""
+        if self._paper_execution_enabled and "paper" in self.platforms:
+            return "paper"
+        for preferred in ("coinbase", "oanda", "paper"):
+            if preferred in self.platforms:
+                return preferred
+        return next(iter(self.platforms.keys()), None)
+
+    def _attach_active_platform_metadata(self, payload: Dict[str, Any]) -> Dict[str, Any]:
+        """Expose active-platform aliases so higher layers do not hard-code coinbase."""
+        platform_breakdowns = payload.get("platform_breakdowns") or {}
+        active_name = self._resolve_active_execution_platform_name()
+        active_breakdown = platform_breakdowns.get(active_name) if active_name else {}
+        if not active_breakdown and platform_breakdowns:
+            active_name, active_breakdown = next(iter(platform_breakdowns.items()))
+
+        active_breakdown = active_breakdown or {}
+        futures_summary = active_breakdown.get("futures_summary") or {}
+
+        payload["active_execution_platform"] = active_name
+        payload["active_platform_breakdown"] = active_breakdown
+        if futures_summary:
+            payload["futures_summary"] = futures_summary
+            payload["buying_power"] = futures_summary.get("buying_power", payload.get("buying_power", 0.0))
+            payload["initial_margin"] = futures_summary.get("initial_margin", payload.get("initial_margin", 0.0))
+            payload["total_balance_usd"] = futures_summary.get("total_balance_usd", payload.get("total_balance_usd", payload.get("cash_balance_usd", 0.0)))
+
+        return payload
+
     def get_balance(self) -> Dict[str, float]:
         """
         Get combined account balances from all configured platforms.
@@ -214,17 +269,14 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         # Classify asset and route to appropriate platform
         asset_class = classify_asset_pair(asset_pair)
 
-        target_platform = None
-        if asset_class == "crypto":
-            target_platform = self.platforms.get("coinbase")
-        elif asset_class == "forex":
-            target_platform = self.platforms.get("oanda")
+        target_platform_name = self._resolve_target_platform_name(asset_class)
+        target_platform = self.platforms.get(target_platform_name) if target_platform_name else None
 
         if target_platform:
             logger.info(
                 "Routing trade for %s to %s",
                 asset_pair,
-                target_platform.__class__.__name__,
+                target_platform_name or target_platform.__class__.__name__,
             )
             # Ensure a circuit breaker is present; lazily attach if missing
             cb = (
@@ -414,7 +466,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         # Sum cash balances across platforms
         cash_balance_usd = sum(cash_balances.values()) if cash_balances else 0.0
 
-        return {
+        return self._attach_active_platform_metadata({
             "total_value_usd": total_value_usd,
             "futures_value_usd": futures_value_usd,
             "spot_value_usd": spot_value_usd,
@@ -424,7 +476,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
             "holdings": all_holdings,
             "platform_breakdowns": platform_breakdowns,
             "unrealized_pnl": total_unrealized,
-        }
+        })
 
     async def aget_portfolio_breakdown(self) -> Dict[str, Any]:
         """
@@ -513,7 +565,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         # Sum cash balances across platforms
         cash_balance_usd = sum(cash_balances.values()) if cash_balances else 0.0
 
-        return {
+        return self._attach_active_platform_metadata({
             "total_value_usd": total_value_usd,
             "futures_value_usd": futures_value_usd,
             "spot_value_usd": spot_value_usd,
@@ -523,7 +575,20 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
             "holdings": all_holdings,
             "platform_breakdowns": platform_breakdowns,
             "unrealized_pnl": total_unrealized,
-        }
+        })
+
+    def update_position_prices(self, price_updates: Dict[str, float]) -> None:
+        """Forward mark-to-market updates to sub-platforms, especially paper/mock."""
+        for name, platform in self.platforms.items():
+            try:
+                platform.update_position_prices(price_updates)
+            except Exception as e:
+                logger.debug(
+                    "Failed MTM price update for %s platform: %s",
+                    name,
+                    e,
+                    exc_info=True,
+                )
 
     def test_connection(self) -> Dict[str, bool]:
         """

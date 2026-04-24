@@ -635,7 +635,12 @@ class RiskGatekeeper:
         leverage = risk_metrics.get("leverage_estimate", 0)
 
         portfolio_breakdown = context.get("portfolio_breakdown", {}) or {}
-        futures_summary = portfolio_breakdown.get("platform_breakdowns", {}).get("coinbase", {}).get("futures_summary", {}) or {}
+        futures_summary = portfolio_breakdown.get("futures_summary") or {}
+        if not futures_summary:
+            active_breakdown = portfolio_breakdown.get("active_platform_breakdown", {}) or {}
+            futures_summary = active_breakdown.get("futures_summary", {}) or {}
+        if not futures_summary:
+            futures_summary = portfolio_breakdown.get("platform_breakdowns", {}).get("coinbase", {}).get("futures_summary", {}) or {}
         initial_margin = _coerce_monitoring_float(
             futures_summary.get("initial_margin")
             or portfolio_breakdown.get("initial_margin")

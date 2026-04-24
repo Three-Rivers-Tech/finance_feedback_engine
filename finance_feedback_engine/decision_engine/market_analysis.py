@@ -203,7 +203,14 @@ class MarketAnalysisContext:
         oanda_history = portfolio.get("oanda_price_history", {}) if oanda_enabled else {}
 
         platform_breakdowns = portfolio.get("platform_breakdowns") or {}
-        coinbase_breakdown = platform_breakdowns.get("coinbase") or {}
+        active_platform_name = portfolio.get("active_execution_platform")
+        coinbase_breakdown = (
+            platform_breakdowns.get("coinbase")
+            or (platform_breakdowns.get(active_platform_name) if active_platform_name else None)
+            or platform_breakdowns.get("paper")
+            or portfolio.get("active_platform_breakdown")
+            or {}
+        )
         if coinbase_enabled and not coinbase_holdings and coinbase_breakdown:
             derived_coinbase_holdings: Dict[str, Dict[str, Any]] = {}
             for pos in (coinbase_breakdown.get("futures_positions") or []):
