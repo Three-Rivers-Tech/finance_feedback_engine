@@ -216,6 +216,23 @@ class TestMockTradingPlatform:
         assert "entry_price" in position
         assert "unrealized_pnl" in position
 
+    def test_active_positions_expose_contract_size_metadata(self, platform):
+        decision = {
+            "id": "test-contract-size",
+            "action": "BUY",
+            "asset_pair": "BTCUSD",
+            "suggested_amount": 1000.0,
+            "entry_price": 50000.0,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        platform.execute_trade(decision)
+
+        positions = platform.get_active_positions()["positions"]
+
+        assert positions
+        assert positions[0]["contract_size"] == 0.1
+        assert positions[0]["contracts"] > 0
+
     def test_trade_history(self, platform):
         """Test trade history tracking."""
         # Execute multiple trades

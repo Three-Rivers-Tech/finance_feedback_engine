@@ -411,17 +411,26 @@ class DecisionValidator:
             position_state = context.get("position_state")
             if isinstance(position_state, dict):
                 position_contracts = float(position_state.get("contracts", 0) or 0)
+                position_contract_size = float(
+                    position_state.get("contract_size")
+                    or position_state.get("contract_multiplier")
+                    or 1.0
+                )
             else:
                 position_contracts = 0
+                position_contract_size = 1.0
+            if position_contract_size <= 0:
+                position_contract_size = 1.0
             if position_contracts > 0:
-                suggested_amount = position_contracts * current_price
+                suggested_amount = position_contracts * current_price * position_contract_size
                 recommended_position_size = position_contracts
                 logger.info(
-                    "Exit sizing: $%.2f USD notional for %s (%.6f contracts @ $%.2f)",
+                    "Exit sizing: $%.2f USD notional for %s (%.6f contracts @ $%.2f x contract_size %.4f)",
                     suggested_amount,
                     action,
                     position_contracts,
                     current_price,
+                    position_contract_size,
                 )
             else:
                 logger.warning(

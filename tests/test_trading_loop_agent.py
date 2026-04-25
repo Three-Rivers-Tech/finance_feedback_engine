@@ -1672,6 +1672,35 @@ def test_derisking_execution_metadata_uses_active_position_size(trading_agent):
 
 
 
+def test_derisking_execution_metadata_uses_contract_effective_notional_when_available(trading_agent):
+    decision = {
+        "asset_pair": "ETHUSD",
+        "action": "REDUCE_LONG",
+        "policy_action": "REDUCE_LONG",
+        "entry_price": 2127.0,
+    }
+    monitoring_context = {
+        "active_positions": {
+            "futures": [
+                {
+                    "product_id": "ETP-20DEC30-CDE",
+                    "side": "LONG",
+                    "number_of_contracts": "5",
+                    "current_price": "2127.0",
+                    "contract_size": "0.1",
+                }
+            ]
+        }
+    }
+
+    trading_agent._apply_derisking_execution_metadata(decision, monitoring_context)
+
+    assert decision["current_position_size"] == 5.0
+    assert decision["recommended_position_size"] == 5.0
+    assert decision["suggested_amount"] == 1063.5
+
+
+
 def test_performance_risk_checks_allow_derisking_actions(trading_agent):
     trading_agent._performance_metrics.update(
         {

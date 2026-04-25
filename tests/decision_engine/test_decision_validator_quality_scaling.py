@@ -1,3 +1,4 @@
+import pytest
 from finance_feedback_engine.decision_engine.decision_validator import DecisionValidator
 from finance_feedback_engine.decision_engine.position_sizing import PositionSizingCalculator, ProviderTranslationResult
 
@@ -638,6 +639,47 @@ def test_decision_validator_policy_action_close_has_no_legacy_compatibility():
     assert decision["policy_action"] == "CLOSE_LONG"
     assert decision["policy_action_family"] == "close_long"
     assert decision["legacy_action_compatibility"] is None
+
+
+
+def test_decision_validator_exit_sizing_respects_contract_size_metadata():
+    validator = DecisionValidator(config=_base_config())
+
+    context = {
+        "market_data": {"close": 2127.0},
+        "balance": {"USD": 1000.0},
+        "price_change": 0.0,
+        "volatility": 0.01,
+        "portfolio": {},
+        "position_state": {"state": "LONG", "contracts": 5.0, "contract_size": 0.1},
+    }
+    ai_response = {
+        "action": "CLOSE_LONG",
+        "confidence": 80,
+        "reasoning": "trim the full long",
+        "amount": 0,
+    }
+    position_sizing_result = {
+        "recommended_position_size": 0,
+        "stop_loss_price": 2080.0,
+        "sizing_stop_loss_percentage": 0.02,
+        "risk_percentage": 0.01,
+    }
+
+    decision = validator.create_decision(
+        asset_pair="ETHUSD",
+        context=context,
+        ai_response=ai_response,
+        position_sizing_result=position_sizing_result,
+        relevant_balance={"USD": 1000.0},
+        balance_source="test",
+        has_existing_position=True,
+        is_crypto=True,
+        is_forex=False,
+    )
+
+    assert decision["recommended_position_size"] == 5.0
+    assert decision["suggested_amount"] == pytest.approx(1063.5)
 
 
 

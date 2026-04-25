@@ -95,6 +95,7 @@ class MockPortfolioRetriever(AbstractPortfolioRetriever):
                         pnl=unrealized_pnl,
                         side=side,
                         contracts=contracts,
+                        contract_size=contract_multiplier,
                         unrealized_pnl=unrealized_pnl,
                         daily_pnl=pos.get("daily_pnl", 0.0),
                         leverage=10.0,  # Mock default leverage

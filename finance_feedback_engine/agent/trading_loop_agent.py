@@ -2606,6 +2606,17 @@ class TradingLoopAgent:
         except Exception:
             current_price = 0.0
 
+        try:
+            contract_size = float(
+                matched_position.get("contract_size")
+                or matched_position.get("contract_multiplier")
+                or 1.0
+            )
+        except Exception:
+            contract_size = 1.0
+        if contract_size <= 0:
+            contract_size = 1.0
+
         if current_position_size <= 0:
             return
 
@@ -2618,7 +2629,7 @@ class TradingLoopAgent:
         if legacy_action:
             decision["legacy_action_compatibility"] = legacy_action
         if current_price > 0:
-            decision["suggested_amount"] = current_position_size * current_price
+            decision["suggested_amount"] = current_position_size * current_price * contract_size
 
     async def _hydrate_derisking_monitoring_context(
         self, decision: Dict[str, Any], monitoring_context: Dict[str, Any]

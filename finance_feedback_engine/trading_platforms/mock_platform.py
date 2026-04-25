@@ -603,6 +603,7 @@ class MockTradingPlatform(BaseTradingPlatform):
                     "contracts": abs(contracts),  # Report as positive for display
                     "entry_price": pos["entry_price"],
                     "current_price": current_price,
+                    "contract_size": self._contract_multiplier,
                     "unrealized_pnl": unrealized_pnl,
                     "daily_pnl": pos.get("daily_pnl", 0.0),
                     "leverage": 10.0,  # Mock default leverage
@@ -773,7 +774,9 @@ class MockTradingPlatform(BaseTradingPlatform):
                 {
                     "id": f"mock-{asset_pair}",
                     "instrument": asset_pair,
+                    "product_id": asset_pair,
                     "units": pos["contracts"],
+                    "contracts": abs(pos["contracts"]),
                     "entry_price": pos["entry_price"],
                     "current_price": current_price,
                     "pnl": pnl,
@@ -781,6 +784,8 @@ class MockTradingPlatform(BaseTradingPlatform):
                     "platform": "mock",
                     "leverage": 10.0,
                     "position_type": pos.get("side", "LONG"),
+                    "side": pos.get("side", "LONG"),
+                    "contract_size": self._contract_multiplier,
                 }
             )
 

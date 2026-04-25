@@ -1914,6 +1914,11 @@ Missing Evidence: <what additional evidence would increase confidence>
         unrealized_pnl = (
             current_position.get("unrealized_pnl") or 0
         )
+        contract_size = (
+            current_position.get("contract_size")
+            or current_position.get("contract_multiplier")
+            or 1.0
+        )
 
         logger.info(
             "Position state for %s: %s %s contracts @ $%s (PnL: $%s) [product: %s]",
@@ -1925,6 +1930,7 @@ Missing Evidence: <what additional evidence would increase confidence>
             "has_position": True,
             "side": side,
             "contracts": float(contracts),
+            "contract_size": float(contract_size),
             "entry_price": float(entry_price),
             "unrealized_pnl": float(unrealized_pnl),
             "allowed_signals": allowed_signals,
