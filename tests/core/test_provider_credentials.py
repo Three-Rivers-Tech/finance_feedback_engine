@@ -30,3 +30,15 @@ def test_resolve_provider_credentials_handles_missing_and_invalid_values() -> No
 
     assert creds.coinbase == {"api_key": "fallback"}
     assert creds.oanda is None
+
+
+def test_resolve_provider_credentials_includes_paper_platform_credentials() -> None:
+    config = {
+        "platforms": [
+            {"name": "paper", "credentials": {"initial_cash_usd": 250000}},
+        ],
+    }
+
+    creds = resolve_provider_credentials(config)
+
+    assert creds.paper == {"initial_cash_usd": 250000}

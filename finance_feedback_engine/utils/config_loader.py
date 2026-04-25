@@ -386,7 +386,9 @@ def load_env_config() -> Dict[str, Any]:
     }
 
     paper_trading_enabled = _env_bool("PAPER_TRADING_ENABLED", False)
-    paper_trading_only = _env_bool("PAPER_TRADING_ONLY", False)
+    # Explicit paper mode should take over by default; PAPER_TRADING_ONLY only exists
+    # as an escape hatch if we ever need mixed-platform diagnostics again.
+    paper_trading_only = _env_bool("PAPER_TRADING_ONLY", paper_trading_enabled)
     paper_initial_cash = _env_float("PAPER_INITIAL_CASH_USD", 10000.0)
 
     config["paper_trading"] = {

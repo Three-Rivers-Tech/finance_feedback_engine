@@ -72,3 +72,19 @@ def test_core_portfolio_breakdown_sync_proxy():
         engine.trading_platform = _P()
         out = engine.get_portfolio_breakdown()
         assert out['num_assets'] == 2
+
+
+def test_load_env_config_paper_enabled_implies_paper_only(monkeypatch):
+    monkeypatch.setenv("PAPER_TRADING_ENABLED", "true")
+    monkeypatch.delenv("PAPER_TRADING_ONLY", raising=False)
+    monkeypatch.setenv("PAPER_INITIAL_CASH_USD", "250000")
+
+    cfg = load_env_config()
+
+    assert cfg["paper_trading"]["enabled"] is True
+    assert cfg["platforms"] == [
+        {
+            "name": "paper",
+            "credentials": {"initial_cash_usd": 250000.0},
+        }
+    ]

@@ -12,6 +12,7 @@ class ProviderCredentials:
 
     coinbase: Optional[Dict[str, Any]]
     oanda: Optional[Dict[str, Any]]
+    paper: Optional[Dict[str, Any]]
 
 
 def _is_crypto_only_runtime(config: Dict[str, Any]) -> bool:
@@ -50,6 +51,11 @@ def resolve_provider_credentials(config: Dict[str, Any]) -> ProviderCredentials:
     )
 
     platform_list: Iterable[Any] = config.get("platforms", []) or []
+    paper_credentials = (
+        config.get("paper")
+        if isinstance(config.get("paper"), dict)
+        else None
+    )
     if not _is_dict_credentials(oanda_credentials):
         oanda_credentials = _find_credentials(platform_list, names={"oanda"})
 
@@ -59,12 +65,19 @@ def resolve_provider_credentials(config: Dict[str, Any]) -> ProviderCredentials:
             names={"coinbase", "coinbase_advanced"},
         )
 
+    if not _is_dict_credentials(paper_credentials):
+        paper_credentials = _find_credentials(
+            platform_list,
+            names={"paper", "mock", "sandbox"},
+        )
+
     if _is_crypto_only_runtime(config):
         oanda_credentials = None
 
     return ProviderCredentials(
         coinbase=coinbase_credentials if _is_dict_credentials(coinbase_credentials) else None,
         oanda=oanda_credentials if _is_dict_credentials(oanda_credentials) else None,
+        paper=paper_credentials if _is_dict_credentials(paper_credentials) else None,
     )
 
 
