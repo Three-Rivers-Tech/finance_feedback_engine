@@ -233,6 +233,71 @@ class TestMockTradingPlatform:
         assert positions[0]["contract_size"] == 0.1
         assert positions[0]["contracts"] > 0
 
+    def test_close_with_default_slippage_allows_small_contract_tolerance(self):
+        platform = MockTradingPlatform(initial_balance={"FUTURES_USD": 250000.0})
+        decision = {
+            "id": "open-slippage-tolerance",
+            "action": "BUY",
+            "asset_pair": "BTCUSD",
+            "suggested_amount": 500.0,
+            "entry_price": 77307.0,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        open_result = platform.execute_trade(decision)
+        assert open_result["success"] is True
+
+        positions = platform.get_active_positions()["positions"]
+        assert positions
+        current_price = positions[0]["current_price"]
+        contracts = positions[0]["contracts"]
+        close_result = platform.execute_trade(
+            {
+                "id": "close-slippage-tolerance",
+                "action": "SELL",
+                "asset_pair": "BTCUSD",
+                "suggested_amount": contracts * current_price * 0.1,
+                "entry_price": current_price,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
+
+        assert close_result["success"] is True
+        assert platform.get_active_positions()["positions"] == []
+
+    def test_large_exit_overshoot_still_fails_despite_close_tolerance(self):
+        platform = MockTradingPlatform(
+            initial_balance={"FUTURES_USD": 250000.0},
+            slippage_config={"type": "percentage", "rate": 0.0, "spread": 0.0},
+        )
+        entry_price = 77307.0
+        contracts = 0.0646055554
+        correct_notional = contracts * entry_price * 0.1
+        open_result = platform.execute_trade(
+            {
+                "id": "open-large-overshoot",
+                "action": "BUY",
+                "asset_pair": "BTCUSD",
+                "suggested_amount": correct_notional,
+                "entry_price": entry_price,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
+        assert open_result["success"] is True
+
+        fail_result = platform.execute_trade(
+            {
+                "id": "close-large-overshoot",
+                "action": "SELL",
+                "asset_pair": "BTCUSD",
+                "suggested_amount": contracts * entry_price,
+                "entry_price": entry_price,
+                "timestamp": datetime.now(UTC).isoformat(),
+            }
+        )
+
+        assert fail_result["success"] is False
+        assert "Insufficient position" in fail_result["error"]
+
     def test_trade_history(self, platform):
         """Test trade history tracking."""
         # Execute multiple trades

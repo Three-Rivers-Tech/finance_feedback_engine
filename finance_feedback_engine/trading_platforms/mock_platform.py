@@ -74,6 +74,9 @@ class MockTradingPlatform(BaseTradingPlatform):
 
         # Coinbase futures contract multiplier
         self._contract_multiplier = 0.1
+        # Allow tiny close-side overshoots from slippage-adjusted execution price
+        # without masking materially bad sizing bugs.
+        self._close_contract_tolerance_ratio = 0.005
 
         # Platform metadata
         self._account_id = f"mock-{uuid.uuid4().hex[:8]}"
@@ -263,6 +266,20 @@ class MockTradingPlatform(BaseTradingPlatform):
                         # Closing SHORT position
                         short_contracts = abs(pos["contracts"])  # Convert negative to positive
                         
+                        tolerance_contracts = max(
+                            1e-9,
+                            short_contracts * self._close_contract_tolerance_ratio,
+                        )
+                        if contracts > short_contracts and (
+                            contracts - short_contracts
+                        ) <= tolerance_contracts:
+                            logger.info(
+                                "Clamping SHORT close from %.6f to available %.6f contracts within %.4f%% tolerance",
+                                contracts,
+                                short_contracts,
+                                self._close_contract_tolerance_ratio * 100,
+                            )
+                            contracts = short_contracts
                         if short_contracts >= contracts:
                             # Calculate realized P&L for SHORT (inverted)
                             # Profit when entry_price > exit_price
@@ -373,6 +390,21 @@ class MockTradingPlatform(BaseTradingPlatform):
                     # Check if this is a LONG position (close) or SHORT position (increase short)
                     if pos.get("side") == "LONG":
                         # Close or reduce LONG position
+                        available_contracts = pos["contracts"]
+                        tolerance_contracts = max(
+                            1e-9,
+                            abs(available_contracts) * self._close_contract_tolerance_ratio,
+                        )
+                        if contracts > available_contracts and (
+                            contracts - available_contracts
+                        ) <= tolerance_contracts:
+                            logger.info(
+                                "Clamping LONG close from %.6f to available %.6f contracts within %.4f%% tolerance",
+                                contracts,
+                                available_contracts,
+                                self._close_contract_tolerance_ratio * 100,
+                            )
+                            contracts = available_contracts
                         if pos["contracts"] >= contracts:
                             # Calculate realized P&L for LONG
                             pnl = (
