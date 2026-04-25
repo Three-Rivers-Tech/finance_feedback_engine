@@ -833,7 +833,7 @@ async def test_judged_derisking_action_is_not_blocked_by_open_confidence_gate(tr
 
 
 @pytest.mark.asyncio
-async def test_judged_open_in_ranging_requires_stricter_confidence_gate(trading_agent):
+async def test_judged_open_in_ranging_now_uses_relaxed_threshold(trading_agent):
     decision = {
         "action": "OPEN_SMALL_LONG",
         "policy_action": "OPEN_SMALL_LONG",
@@ -845,10 +845,9 @@ async def test_judged_open_in_ranging_requires_stricter_confidence_gate(trading_
 
     should_execute, reason_code, reason_message = await trading_agent._should_execute_with_reason(decision)
 
-    assert should_execute is False
-    assert reason_code == "JUDGED_OPEN_REGIME_MIN_CONFIDENCE"
-    assert "ranging" in reason_message
-    assert "85% < 90%" in reason_message
+    assert should_execute is True
+    assert reason_code == "OK"
+    assert reason_message == "Autonomous execution enabled"
 
 
 @pytest.mark.asyncio
@@ -1092,20 +1091,20 @@ async def test_filtered_context_specific_judged_open_gate_preserves_audit_spine_
 
 
 @pytest.mark.asyncio
-async def test_filtered_regime_specific_judged_open_gate_preserves_audit_spine_fields(trading_agent, mock_dependencies):
+async def test_filtered_unknown_regime_specific_judged_open_gate_preserves_audit_spine_fields(trading_agent, mock_dependencies):
     mock_dependencies["engine"].analyze_asset_async = AsyncMock(
         return_value={
             "action": "OPEN_SMALL_LONG",
             "policy_action": "OPEN_SMALL_LONG",
             "confidence": 85,
             "asset_pair": "BTCUSD",
-            "reasoning": "Judge sees a decent range-bound setup.",
+            "reasoning": "Judge sees a decent setup but regime is unresolved.",
             "decision_origin": "judge",
-            "market_regime": "ranging",
+            "market_regime": "unknown",
             "ensemble_metadata": {
                 "role_decisions": {
                     "bull": {"action": "OPEN_SMALL_LONG", "confidence": 88, "reasoning": "Bounce"},
-                    "judge": {"action": "OPEN_SMALL_LONG", "confidence": 85, "reasoning": "Still too weak for range"},
+                    "judge": {"action": "OPEN_SMALL_LONG", "confidence": 85, "reasoning": "Still too weak for unknown regime"},
                 }
             },
         }
@@ -1117,7 +1116,7 @@ async def test_filtered_regime_specific_judged_open_gate_preserves_audit_spine_f
     saved_decision = mock_dependencies["engine"].decision_store.save_decision.call_args[0][0]
     assert saved_decision["filtered_reason_code"] == "JUDGED_OPEN_REGIME_MIN_CONFIDENCE"
     assert saved_decision["decision_origin"] == "judge"
-    assert saved_decision["market_regime"] == "ranging"
+    assert saved_decision["market_regime"] == "unknown"
     assert saved_decision["ensemble_metadata"]["role_decisions"]["judge"]["action"] == "OPEN_SMALL_LONG"
 
 

@@ -329,7 +329,7 @@ class TradingAgentConfig(BaseModel):
     high_volatility_threshold: float = 0.04
     high_volatility_min_confidence: float = 80.0
     judged_open_min_confidence_pct: float = 80.0
-    judged_open_min_confidence_pct_ranging: float = 90.0
+    judged_open_min_confidence_pct_ranging: float = 80.0
     judged_open_min_confidence_pct_unknown: float = 90.0
     judged_open_long_min_confidence_pct_trending_up_moderate_volatility: float = 90.0
     judged_open_rerank_penalty_enabled: bool = True
