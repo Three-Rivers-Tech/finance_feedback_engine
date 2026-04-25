@@ -157,6 +157,13 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
 
         return payload
 
+    def _iter_portfolio_telemetry_platforms(self):
+        """Yield only the platform(s) that should contribute to portfolio telemetry."""
+        active_name = self._resolve_active_execution_platform_name()
+        if self._paper_execution_enabled and active_name and active_name in self.platforms:
+            return [(active_name, self.platforms[active_name])]
+        return list(self.platforms.items())
+
     def get_balance(self) -> Dict[str, float]:
         """
         Get combined account balances from all configured platforms.
@@ -167,7 +174,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
             'oanda_USD': 50000.0}
         """
         combined_balances = {}
-        for name, platform in self.platforms.items():
+        for name, platform in self._iter_portfolio_telemetry_platforms():
             try:
                 balances = platform.get_balance() or {}
                 if balances:
@@ -334,7 +341,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         Get combined account information from all platforms.
         """
         combined_info = {}
-        for name, platform in self.platforms.items():
+        for name, platform in self._iter_portfolio_telemetry_platforms():
             try:
                 combined_info[name] = platform.get_account_info()
             except (ValueError, TypeError, KeyError) as e:
@@ -352,7 +359,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
             Each position will also include a 'platform' key indicating its source.
         """
         all_positions: List[PositionInfo] = []
-        for name, platform_instance in self.platforms.items():
+        for name, platform_instance in self._iter_portfolio_telemetry_platforms():
             try:
                 # Call get_active_positions on the sub-platform
                 platform_positions_data = platform_instance.get_active_positions()
@@ -416,7 +423,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
 
         platform_breakdowns = {}
 
-        for name, platform in self.platforms.items():
+        for name, platform in self._iter_portfolio_telemetry_platforms():
             try:
                 breakdown = platform.get_portfolio_breakdown()
                 platform_breakdowns[name] = breakdown
@@ -505,7 +512,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         # Create a list of concurrent tasks
         tasks: List[Coroutine] = [
             _get_platform_breakdown(name, platform)
-            for name, platform in self.platforms.items()
+            for name, platform in self._iter_portfolio_telemetry_platforms()
         ]
 
         # Run all tasks in parallel
@@ -520,7 +527,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         futures_value_usd = 0
         spot_value_usd = 0
         platform_breakdowns = {}
-        platform_names = list(self.platforms.keys())
+        platform_names = [name for name, _ in self._iter_portfolio_telemetry_platforms()]
 
         for i, breakdown in enumerate(results):
             name = platform_names[i]

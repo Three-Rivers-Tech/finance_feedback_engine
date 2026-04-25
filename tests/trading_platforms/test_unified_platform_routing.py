@@ -25,6 +25,22 @@ class TestUnifiedPlatformRouting:
             "decision_id": "test-001",
         }
         platform.get_account_info.return_value = {"status": "active"}
+        platform.get_active_positions.return_value = {
+            "positions": [{"product_id": "BIP-20DEC30-CDE", "side": "LONG"}]
+        }
+        platform.get_portfolio_breakdown.return_value = {
+            "total_value_usd": 195.0,
+            "futures_value_usd": 195.0,
+            "spot_value_usd": 0.0,
+            "num_assets": 0,
+            "holdings": [],
+            "unrealized_pnl": -3.3,
+            "futures_summary": {
+                "total_balance_usd": 195.0,
+                "buying_power": -0.77,
+                "initial_margin": 190.64,
+            },
+        }
         # Prevent Mock from creating auto-mocks for circuit breaker checks
         platform.get_execute_breaker.return_value = None
         platform.set_execute_breaker = Mock()
@@ -344,3 +360,40 @@ class TestUnifiedPlatformRouting:
         unified.update_position_prices(updates)
 
         mock_paper.update_position_prices.assert_called_once_with(updates)
+
+
+    def test_paper_mode_hides_inactive_platform_telemetry(self, mock_coinbase, mock_paper, monkeypatch):
+        """Paper mode telemetry should not leak stale inactive platform balances/positions."""
+        monkeypatch.setattr(
+            "finance_feedback_engine.trading_platforms.unified_platform.CoinbaseAdvancedPlatform",
+            lambda x: mock_coinbase,
+        )
+        monkeypatch.setattr(
+            "finance_feedback_engine.trading_platforms.unified_platform.MockTradingPlatform",
+            lambda creds, initial_balance=None: mock_paper,
+        )
+
+        unified = UnifiedTradingPlatform(
+            {
+                "coinbase": {"api_key": "test", "api_secret": "test"},
+                "paper": {"initial_cash_usd": 250000.0},
+            },
+            config={"paper_trading_defaults": {"enabled": True}},
+        )
+        unified.platforms["coinbase"] = mock_coinbase
+        unified.platforms["paper"] = mock_paper
+
+        balance = unified.get_balance()
+        portfolio = unified.get_portfolio_breakdown()
+        account_info = unified.get_account_info()
+        positions = unified.get_active_positions()
+
+        assert balance == {"paper_FUTURES_USD": 250000.0, "paper_SPOT_USD": 50000.0}
+        assert set(portfolio["platform_breakdowns"].keys()) == {"paper"}
+        assert portfolio["active_execution_platform"] == "paper"
+        assert account_info == {"paper": {"status": "active", "mode": "mock"}}
+        assert positions == {"positions": []}
+        mock_coinbase.get_balance.assert_not_called()
+        mock_coinbase.get_portfolio_breakdown.assert_not_called()
+        mock_coinbase.get_account_info.assert_not_called()
+        mock_coinbase.get_active_positions.assert_not_called()
