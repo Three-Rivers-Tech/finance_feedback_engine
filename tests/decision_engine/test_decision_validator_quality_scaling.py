@@ -657,7 +657,7 @@ def test_decision_validator_exit_sizing_respects_contract_size_metadata():
         "action": "CLOSE_LONG",
         "confidence": 80,
         "reasoning": "trim the full long",
-        "amount": 0,
+        "amount": 5050.0,
     }
     position_sizing_result = {
         "recommended_position_size": 0,

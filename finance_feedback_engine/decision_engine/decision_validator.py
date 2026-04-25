@@ -406,7 +406,6 @@ class DecisionValidator:
             _is_exit_action
             and has_existing_position
             and current_price > 0
-            and (suggested_amount is None or float(suggested_amount or 0) <= 0)
         ):
             position_state = context.get("position_state")
             if isinstance(position_state, dict):
