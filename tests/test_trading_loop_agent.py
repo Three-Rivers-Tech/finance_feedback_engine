@@ -1672,6 +1672,38 @@ def test_derisking_execution_metadata_uses_active_position_size(trading_agent):
 
 
 
+def test_derisking_execution_metadata_preserves_existing_exit_notional(trading_agent):
+    decision = {
+        "asset_pair": "BTCUSD",
+        "action": "REDUCE_LONG",
+        "policy_action": "REDUCE_LONG",
+        "entry_price": 77556.22,
+        "suggested_amount": 1250.1535893290443,
+        "current_position_size": 0.1611932078857175,
+        "recommended_position_size": 0.1611932078857175,
+    }
+    monitoring_context = {
+        "active_positions": {
+            "futures": [
+                {
+                    "product_id": "BTC-FUT",
+                    "side": "LONG",
+                    "number_of_contracts": "0.1611932078857175",
+                    "current_price": "78323.7",
+                    "contract_size": "0.1",
+                }
+            ]
+        }
+    }
+
+    trading_agent._apply_derisking_execution_metadata(decision, monitoring_context)
+
+    assert decision["current_position_size"] == 0.1611932078857175
+    assert decision["recommended_position_size"] == 0.1611932078857175
+    assert decision["suggested_amount"] == 1250.1535893290443
+
+
+
 def test_derisking_execution_metadata_uses_contract_effective_notional_when_available(trading_agent):
     decision = {
         "asset_pair": "ETHUSD",

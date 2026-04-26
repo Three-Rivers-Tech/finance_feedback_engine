@@ -2624,11 +2624,19 @@ class TradingLoopAgent:
             "legacy_action_compatibility"
         ) or get_legacy_action_compatibility(normalized_action)
         decision["has_existing_position"] = True
-        decision["current_position_size"] = current_position_size
-        decision["recommended_position_size"] = current_position_size
+        if decision.get("current_position_size") is None:
+            decision["current_position_size"] = current_position_size
+        if decision.get("recommended_position_size") is None:
+            decision["recommended_position_size"] = current_position_size
         if legacy_action:
             decision["legacy_action_compatibility"] = legacy_action
-        if current_price > 0:
+        current_suggested_amount = decision.get("suggested_amount")
+        needs_suggested_amount_backfill = current_suggested_amount is None
+        try:
+            needs_suggested_amount_backfill = needs_suggested_amount_backfill or float(current_suggested_amount) <= 0
+        except Exception:
+            needs_suggested_amount_backfill = True
+        if current_price > 0 and needs_suggested_amount_backfill:
             decision["suggested_amount"] = current_position_size * current_price * contract_size
 
     async def _hydrate_derisking_monitoring_context(
