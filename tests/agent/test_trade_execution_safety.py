@@ -46,6 +46,23 @@ def test_reserve_trade_exposure_calls_manager_with_normalized_payload() -> None:
     )
 
 
+def test_decision_reservation_payload_falls_back_to_suggested_amount_for_entry_reservations() -> None:
+    payload = DecisionReservationPayload.from_decision(
+        {
+            "id": "d-suggested",
+            "asset_pair": "BTCUSD",
+            "action": "ADD_SMALL_LONG",
+            "policy_action": "ADD_SMALL_LONG",
+            "suggested_amount": 375.0,
+            "recommended_position_size": 0.0,
+            "entry_price": 78064.45,
+        }
+    )
+
+    assert payload.notional_value == 375.0
+    assert payload.position_size > 0
+
+
 def test_decision_reservation_payload_accepts_legacy_decision_id_alias() -> None:
     payload = DecisionReservationPayload.from_decision(
         {
