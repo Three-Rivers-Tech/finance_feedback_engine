@@ -2937,6 +2937,27 @@ class TradingLoopAgent:
             logger.info("No decisions approved by RiskGatekeeper. Going back to IDLE.")
             await self._transition_to(AgentState.IDLE)
 
+    def _is_paper_only_execution_mode(self) -> bool:
+        """Return True when runtime config is explicitly paper-only."""
+        runtime_config = getattr(getattr(self, "engine", None), "config", None)
+        if runtime_config is None:
+            runtime_config = getattr(self, "config", None)
+
+        if isinstance(runtime_config, dict):
+            platforms = runtime_config.get("platforms") or []
+        else:
+            platforms = getattr(runtime_config, "platforms", []) or []
+
+        if isinstance(platforms, dict):
+            platform_names = platforms.keys()
+        elif isinstance(platforms, (list, tuple, set)):
+            platform_names = platforms
+        else:
+            platform_names = []
+
+        normalized = {str(name).strip().lower() for name in platform_names if name}
+        return normalized == {"paper"}
+
     def _check_performance_based_risks(
         self, decision: Dict[str, Any]
     ) -> tuple[bool, str]:
@@ -2960,8 +2981,9 @@ class TradingLoopAgent:
 
         # Check for excessive consecutive losses
         current_streak = self._performance_metrics["current_streak"]
+        max_loss_streak_before_reject = 5 if self._is_paper_only_execution_mode() else 3
 
-        if current_streak < -3:  # 4 or more consecutive losses
+        if current_streak < -max_loss_streak_before_reject:
             return (
                 False,
                 f"Rejected due to poor performance streak: {abs(current_streak)} consecutive losses",

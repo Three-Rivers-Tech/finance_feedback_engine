@@ -1761,6 +1761,87 @@ def test_performance_risk_checks_allow_derisking_actions(trading_agent):
 
 
 
+def test_performance_risk_checks_reject_live_entry_after_four_losses(trading_agent):
+    trading_agent.engine.config = {"platforms": ["coinbase"]}
+    trading_agent._performance_metrics.update(
+        {
+            "current_streak": -4,
+            "total_trades": 12,
+            "win_rate": 55,
+            "avg_loss": -10,
+            "avg_win": 40,
+            "total_pnl": 100.0,
+        }
+    )
+    decision = {
+        "asset_pair": "BTCUSD",
+        "action": "OPEN_MEDIUM_LONG",
+        "policy_action": "OPEN_MEDIUM_LONG",
+        "confidence": 80,
+        "entry_price": 70535.0,
+    }
+
+    approved, reason = trading_agent._check_performance_based_risks(decision)
+
+    assert approved is False
+    assert "poor performance streak" in reason.lower()
+
+
+
+def test_performance_risk_checks_allow_paper_only_entry_at_four_losses(trading_agent):
+    trading_agent.engine.config = {"platforms": ["paper"]}
+    trading_agent._performance_metrics.update(
+        {
+            "current_streak": -4,
+            "total_trades": 12,
+            "win_rate": 55,
+            "avg_loss": -10,
+            "avg_win": 40,
+            "total_pnl": 100.0,
+        }
+    )
+    decision = {
+        "asset_pair": "BTCUSD",
+        "action": "OPEN_MEDIUM_LONG",
+        "policy_action": "OPEN_MEDIUM_LONG",
+        "confidence": 80,
+        "entry_price": 70535.0,
+    }
+
+    approved, reason = trading_agent._check_performance_based_risks(decision)
+
+    assert approved is True
+    assert "passed" in reason.lower()
+
+
+
+def test_performance_risk_checks_reject_paper_only_entry_after_six_losses(trading_agent):
+    trading_agent.engine.config = {"platforms": ["paper"]}
+    trading_agent._performance_metrics.update(
+        {
+            "current_streak": -6,
+            "total_trades": 12,
+            "win_rate": 55,
+            "avg_loss": -10,
+            "avg_win": 40,
+            "total_pnl": 100.0,
+        }
+    )
+    decision = {
+        "asset_pair": "BTCUSD",
+        "action": "OPEN_MEDIUM_LONG",
+        "policy_action": "OPEN_MEDIUM_LONG",
+        "confidence": 80,
+        "entry_price": 70535.0,
+    }
+
+    approved, reason = trading_agent._check_performance_based_risks(decision)
+
+    assert approved is False
+    assert "6 consecutive losses" in reason.lower()
+
+
+
 def test_performance_risk_checks_do_not_block_derisking_high_risk_to_recent_pnl(trading_agent):
     trading_agent._performance_metrics.update(
         {
