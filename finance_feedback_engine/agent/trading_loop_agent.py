@@ -3183,7 +3183,26 @@ class TradingLoopAgent:
                         order_status_worker = getattr(
                             self.engine, "order_status_worker", None
                         )
-                        if (
+                        execution_platform = str(
+                            execution_result.get("platform") or "unknown"
+                        ).lower()
+                        execution_order_status = str(
+                            execution_result.get("order_status")
+                            or execution_result.get("status")
+                            or ""
+                        ).upper()
+                        is_terminal_mock_fill = (
+                            execution_result.get("success")
+                            and execution_platform == "mock"
+                            and execution_order_status in {"FILLED", "DONE", "SETTLED"}
+                        )
+                        if is_terminal_mock_fill:
+                            logger.info(
+                                "Skipping pending-order tracking for terminal mock fill %s on %s",
+                                extracted_order_id,
+                                asset_pair,
+                            )
+                        elif (
                             order_status_worker
                             and extracted_order_id
                             and normalized_action
