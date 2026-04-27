@@ -241,5 +241,124 @@ def prune_memory(ctx, keep_recent, confirm):
         raise click.Abort()
 
 
+async def lineage_audit_async(ctx, asset_pair, sample_limit, json_output):
+    """Async implementation of lineage_audit command."""
+    config = ctx.obj.get("config")
+    if config is None:
+        console.print(
+            "[bold red]Error: Configuration not found in context[/bold red]"
+        )
+        raise click.Abort()
+
+    async with FinanceFeedbackEngine(config) as engine:
+        if not hasattr(engine, "memory_engine") or engine.memory_engine is None:
+            console.print("[yellow]Portfolio memory not initialized.[/yellow]")
+            return
+
+        report = engine.memory_engine.audit_lineage(
+            asset_pair=asset_pair, sample_limit=sample_limit
+        )
+
+        if json_output:
+            import json as _json
+
+            console.print(_json.dumps(report, indent=2, default=str))
+            return
+
+        console.print("\n[bold cyan]🔗 Outcome Lineage Audit (#42)[/bold cyan]")
+        if asset_pair:
+            console.print(f"[dim]Asset filter: {asset_pair}[/dim]")
+
+        total = report["total_outcomes"]
+        if total == 0:
+            console.print("[yellow]No outcomes found in memory.[/yellow]")
+            return
+
+        null_count = report["outcomes_with_null_lineage"]
+        full_count = report["outcomes_with_full_lineage"]
+        null_color = (
+            "red" if null_count else "green"
+        )
+
+        console.print(f"\n[bold]Total outcomes:[/bold] {total}")
+        console.print(
+            f"[bold]Full lineage:[/bold] [green]{full_count}[/green]"
+        )
+        console.print(
+            f"[bold]Null lineage:[/bold] [{null_color}]{null_count}[/{null_color}] "
+            f"({report['null_lineage_pct']}%)"
+        )
+
+        table = Table(title="Per-field Null Lineage")
+        table.add_column("Field")
+        table.add_column("Null Count", justify="right")
+        table.add_column("Null %", justify="right")
+        for field, count in report["field_null_counts"].items():
+            pct = report["field_null_pct"][field]
+            table.add_row(field, str(count), f"{pct}%")
+        console.print(table)
+
+        patterns = report.get("null_lineage_patterns") or []
+        if patterns:
+            pattern_table = Table(title="Null Lineage Patterns")
+            pattern_table.add_column("Missing Fields")
+            pattern_table.add_column("Count", justify="right")
+            pattern_table.add_column("Pct", justify="right")
+            for pattern in patterns:
+                pattern_table.add_row(
+                    ", ".join(pattern["null_fields"]),
+                    str(pattern["count"]),
+                    f"{pattern['pct']}%",
+                )
+            console.print(pattern_table)
+
+        samples = report.get("sample_orphans") or []
+        if samples:
+            console.print("\n[bold]Sample orphan outcomes:[/bold]")
+            for sample in samples:
+                console.print(f"  • {sample}")
+
+
+@click.command(name="lineage-audit")
+@click.option("--asset-pair", default=None, help="Filter by asset pair (optional)")
+@click.option(
+    "--sample-limit",
+    type=int,
+    default=5,
+    help="Number of orphan outcomes to surface (default: 5)",
+)
+@click.option(
+    "--json",
+    "json_output",
+    is_flag=True,
+    default=False,
+    help="Emit raw JSON instead of formatted output",
+)
+@click.pass_context
+def lineage_audit(ctx, asset_pair, sample_limit, json_output):
+    """Quantify outcome rows whose lineage to source decisions is broken.
+
+    Counts outcomes whose decision_id / asset_pair / ai_provider were
+    backfilled with sentinel values ('unknown', 'UNKNOWN', etc.) by the
+    recorder, which severs the outcome → decision JSON join.
+
+    Example:
+        python main.py lineage-audit --asset-pair BTCUSD
+    """
+    try:
+        asyncio.run(
+            lineage_audit_async(ctx, asset_pair, sample_limit, json_output)
+        )
+    except Exception as e:
+        console.print(
+            f"[bold red]Error running lineage audit:[/bold red] {str(e)}"
+        )
+        if ctx.obj.get("verbose"):
+            import traceback
+
+            console.print(traceback.format_exc())
+        raise click.Abort()
+
+
 # Export commands for registration in main.py
-commands = [learning_report, prune_memory]
+commands = [learning_report, prune_memory, lineage_audit]

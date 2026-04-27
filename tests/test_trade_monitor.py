@@ -159,6 +159,29 @@ class TestTradeMonitorPnLTracking:
         assert len(trades) == 0
 
 
+class TestTradeMonitorDecisionAssociation:
+    def test_detect_new_trades_extracts_decision_id_from_expected_trade_tuple(
+        self, trade_monitor, mock_platform
+    ):
+        mock_platform.get_portfolio_breakdown.return_value = {
+            "futures_positions": [
+                {
+                    "product_id": "BTC-USD",
+                    "side": "LONG",
+                    "entry_price": 100000.0,
+                    "contracts": 1,
+                }
+            ]
+        }
+        trade_monitor.associate_decision_to_trade("decision-abc", "BTCUSD")
+
+        trade_monitor._detect_new_trades()
+
+        queued = trade_monitor.pending_queue.get_nowait()
+        assert queued["decision_id"] == "decision-abc"
+        assert queued["trade_id"]
+
+
 class TestTradeMonitorIntegration:
     """Integration tests for full monitoring workflows."""
 

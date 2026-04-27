@@ -1209,10 +1209,33 @@ class TradingLoopAgent:
             logger.info(f"Processing {len(closed_trades)} closed trades...")
             for trade_outcome in closed_trades:
                 try:
-                    self.engine.record_trade_outcome(trade_outcome)
+                    decision_id = trade_outcome.get("decision_id")
+                    if not decision_id:
+                        logger.warning(
+                            "Skipping trade outcome recording without decision_id",
+                            extra={
+                                "trade_id": trade_outcome.get("trade_id"),
+                                "product_id": trade_outcome.get("product_id"),
+                            },
+                        )
+                        continue
+
+                    self.engine.record_trade_outcome(
+                        decision_id=decision_id,
+                        exit_price=trade_outcome.get("exit_price", 0.0),
+                        exit_timestamp=trade_outcome.get("exit_time"),
+                        hit_stop_loss=(
+                            trade_outcome.get("exit_reason") == "stop_loss_likely"
+                        ),
+                        hit_take_profit=(
+                            trade_outcome.get("exit_reason") == "take_profit_likely"
+                        ),
+                    )
                     # Update performance metrics based on trade outcome
                     self._update_performance_metrics(trade_outcome)
-                    logger.info(f"Recorded outcome for trade {trade_outcome.get('id')}")
+                    logger.info(
+                        f"Recorded outcome for trade {trade_outcome.get('trade_id')}"
+                    )
                 except Exception as e:
                     logger.error(f"Error recording trade outcome: {e}", exc_info=True)
 

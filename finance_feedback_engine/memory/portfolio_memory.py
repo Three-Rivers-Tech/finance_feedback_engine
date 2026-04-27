@@ -282,6 +282,23 @@ class PortfolioMemoryEngine:
             hit_take_profit=hit_take_profit,
         )
 
+        null_lineage_fields = [
+            field
+            for field in self._LINEAGE_NULL_SENTINELS
+            if self._is_null_lineage(field, getattr(outcome, field, None))
+        ]
+        if null_lineage_fields:
+            logger.warning(
+                "Recording trade outcome with null lineage fields: %s",
+                ", ".join(null_lineage_fields),
+                extra={
+                    "decision_id": outcome.decision_id,
+                    "asset_pair": outcome.asset_pair,
+                    "ai_provider": outcome.ai_provider,
+                    "null_lineage_fields": null_lineage_fields,
+                },
+            )
+
         # Only update memory state if not in read-only mode
         if not self._readonly:
             # Store in history
@@ -1453,6 +1470,115 @@ class PortfolioMemoryEngine:
         )
 
         return generate_learning_validation_metrics(self, asset_pair)
+
+    # ===================================================================
+    # Lineage Audit (#42)
+    # ===================================================================
+
+    # Sentinel values written by record_trade_outcome() when a field is
+    # missing on the source decision. Outcomes carrying these break the
+    # outcome → decision JSON join used by learning analytics.
+    _LINEAGE_NULL_SENTINELS: Dict[str, frozenset] = {
+        "decision_id": frozenset({"", "unknown", "UNKNOWN", "none", "None"}),
+        "asset_pair": frozenset({"", "unknown", "UNKNOWN"}),
+        "ai_provider": frozenset({"", "unknown", "UNKNOWN", "none", "None"}),
+    }
+
+    @classmethod
+    def _is_null_lineage(cls, field: str, value: Any) -> bool:
+        """Return True if value counts as null lineage for the given field."""
+        if value is None:
+            return True
+        sentinels = cls._LINEAGE_NULL_SENTINELS.get(field, frozenset())
+        return isinstance(value, str) and value.strip() in sentinels
+
+    def audit_lineage(
+        self,
+        asset_pair: Optional[str] = None,
+        sample_limit: int = 5,
+    ) -> Dict[str, Any]:
+        """Quantify outcome rows with broken lineage to source decisions.
+
+        Counts outcomes whose ``decision_id`` / ``asset_pair`` / ``ai_provider``
+        equal the sentinel values written by :meth:`record_trade_outcome`
+        when the source decision lacks the field. Used to size remediation
+        work for #42-style lineage gaps.
+
+        Args:
+            asset_pair: Restrict audit to a single asset pair.
+            sample_limit: Number of orphan rows to surface as samples.
+
+        Returns:
+            Dict with totals, per-field null counts, percentages,
+            null-lineage pattern breakdowns, sample orphans, and a
+            ``outcomes_with_full_lineage`` count.
+        """
+        outcomes = self.trade_outcomes
+        if asset_pair:
+            outcomes = [o for o in outcomes if o.asset_pair == asset_pair]
+
+        total = len(outcomes)
+        field_null_counts: Dict[str, int] = {
+            "decision_id": 0,
+            "asset_pair": 0,
+            "ai_provider": 0,
+        }
+        any_null_count = 0
+        samples: List[Dict[str, Any]] = []
+        null_lineage_patterns: Dict[str, int] = defaultdict(int)
+
+        for outcome in outcomes:
+            null_fields: List[str] = []
+            for field in field_null_counts:
+                if self._is_null_lineage(field, getattr(outcome, field, None)):
+                    field_null_counts[field] += 1
+                    null_fields.append(field)
+            if null_fields:
+                any_null_count += 1
+                pattern_key = ", ".join(null_fields)
+                null_lineage_patterns[pattern_key] += 1
+                if len(samples) < max(sample_limit, 0):
+                    samples.append(
+                        {
+                            "decision_id": outcome.decision_id,
+                            "asset_pair": outcome.asset_pair,
+                            "ai_provider": outcome.ai_provider,
+                            "null_fields": null_fields,
+                            "entry_timestamp": outcome.entry_timestamp,
+                            "exit_timestamp": outcome.exit_timestamp,
+                            "realized_pnl": outcome.realized_pnl,
+                        }
+                    )
+
+        def _pct(count: int) -> float:
+            return (count / total * 100.0) if total else 0.0
+
+        sorted_patterns = sorted(
+            null_lineage_patterns.items(),
+            key=lambda item: (-item[1], item[0]),
+        )
+
+        return {
+            "asset_pair_filter": asset_pair,
+            "total_outcomes": total,
+            "outcomes_with_null_lineage": any_null_count,
+            "outcomes_with_full_lineage": total - any_null_count,
+            "null_lineage_pct": round(_pct(any_null_count), 2),
+            "field_null_counts": field_null_counts,
+            "field_null_pct": {
+                field: round(_pct(count), 2)
+                for field, count in field_null_counts.items()
+            },
+            "null_lineage_patterns": [
+                {
+                    "null_fields": pattern.split(", "),
+                    "count": count,
+                    "pct": round(_pct(count), 2),
+                }
+                for pattern, count in sorted_patterns
+            ],
+            "sample_orphans": samples,
+        }
 
 
 __all__ = ["PortfolioMemoryEngine", "TradeOutcome", "PerformanceSnapshot"]

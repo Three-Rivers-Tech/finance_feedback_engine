@@ -367,9 +367,10 @@ class TradeMonitor:
                 # Associate with a decision if one is expected for this asset
                 from ..utils.validation import standardize_asset_pair
 
-                standardized_key = standardize_asset_pair(product_id, separator="-")
+                standardized_key = standardize_asset_pair(product_id)
                 with self._expected_trades_lock:
-                    decision_id = self.expected_trades.pop(standardized_key, None)
+                    expected_trade = self.expected_trades.pop(standardized_key, None)
+                decision_id = expected_trade[0] if expected_trade else None
                 if decision_id:
                     logger.info(
                         f"Associated new trade {trade_id} with decision {decision_id}"

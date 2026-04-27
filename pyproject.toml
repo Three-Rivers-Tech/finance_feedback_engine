@@ -38,6 +38,7 @@ dependencies = [
     "packaging>=24.2",
     "tqdm>=4.66.5",
     "python-dateutil>=2.9.0",
+    "pytz>=2026.1",
     "pyarrow>=14.0.0",
     "cachetools>=6.2.3",
     "scikit-learn>=1.7.0",

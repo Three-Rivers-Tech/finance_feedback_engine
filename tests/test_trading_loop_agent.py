@@ -1,5 +1,6 @@
 # tests/test_trading_loop_agent.py
 
+import logging
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -42,6 +43,7 @@ def agent_config():
         analysis_frequency_seconds=1,  # Changed from 0.1 to 1 (integer)
         main_loop_error_backoff_seconds=1,  # Changed from 0.1 to 1 (integer)
         autonomous_execution=True,
+        autonomous={"enabled": True},
         min_confidence_threshold=0.6,
     )
 
@@ -105,3 +107,52 @@ async def test_agent_stop_method(trading_agent):
 
     # Assert
     assert trading_agent.is_running is False
+
+
+@pytest.mark.asyncio
+async def test_learning_state_records_closed_trade_with_decision_id(
+    trading_agent, mock_dependencies
+):
+    trade_outcome = {
+        "trade_id": "trade-123",
+        "decision_id": "decision-123",
+        "exit_price": 123.45,
+        "exit_time": "2026-04-27T13:00:00Z",
+        "exit_reason": "take_profit_likely",
+        "realized_pnl": 25.0,
+    }
+    mock_dependencies["trade_monitor"].get_closed_trades.return_value = [trade_outcome]
+
+    await trading_agent.handle_learning_state()
+
+    mock_dependencies["engine"].record_trade_outcome.assert_called_once_with(
+        decision_id="decision-123",
+        exit_price=123.45,
+        exit_timestamp="2026-04-27T13:00:00Z",
+        hit_stop_loss=False,
+        hit_take_profit=True,
+    )
+    assert trading_agent.state == AgentState.PERCEPTION
+
+
+@pytest.mark.asyncio
+async def test_learning_state_skips_closed_trade_without_decision_id(
+    trading_agent, mock_dependencies, caplog
+):
+    trade_outcome = {
+        "trade_id": "trade-456",
+        "decision_id": None,
+        "product_id": "BTC-USD",
+        "exit_price": 120.0,
+        "exit_time": "2026-04-27T13:05:00Z",
+        "exit_reason": "manual_close",
+        "realized_pnl": -10.0,
+    }
+    mock_dependencies["trade_monitor"].get_closed_trades.return_value = [trade_outcome]
+
+    with caplog.at_level(logging.WARNING):
+        await trading_agent.handle_learning_state()
+
+    mock_dependencies["engine"].record_trade_outcome.assert_not_called()
+    assert "Skipping trade outcome recording without decision_id" in caplog.text
+    assert trading_agent.state == AgentState.PERCEPTION
