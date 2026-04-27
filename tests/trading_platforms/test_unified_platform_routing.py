@@ -397,3 +397,22 @@ class TestUnifiedPlatformRouting:
         mock_coinbase.get_portfolio_breakdown.assert_not_called()
         mock_coinbase.get_account_info.assert_not_called()
         mock_coinbase.get_active_positions.assert_not_called()
+
+
+    def test_enabled_platforms_paper_only_implies_paper_execution_even_without_paper_defaults(
+        self, mock_paper, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "finance_feedback_engine.trading_platforms.unified_platform.MockTradingPlatform",
+            lambda *args, **kwargs: mock_paper,
+        )
+
+        unified = UnifiedTradingPlatform(
+            credentials={"paper": {"initial_balance": {"FUTURES_USD": 250000.0}}},
+            config={"enabled_platforms": ["paper"]},
+        )
+        unified.platforms["paper"] = mock_paper
+
+        assert unified._paper_execution_enabled is True
+        assert unified._resolve_target_platform_name("crypto") == "paper"
+        assert unified._resolve_active_execution_platform_name() == "paper"

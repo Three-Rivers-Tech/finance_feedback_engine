@@ -1,4 +1,4 @@
-from finance_feedback_engine.config.provider_credentials import resolve_provider_credentials
+from finance_feedback_engine.config.provider_credentials import resolve_provider_credentials, resolve_runtime_contract
 
 
 def test_resolve_provider_credentials_prefers_nested_and_fallback_platforms() -> None:
@@ -42,3 +42,27 @@ def test_resolve_provider_credentials_includes_paper_platform_credentials() -> N
     creds = resolve_provider_credentials(config)
 
     assert creds.paper == {"initial_cash_usd": 250000}
+
+
+def test_resolve_runtime_contract_marks_paper_only_enabled_platforms_as_paper_execution() -> None:
+    runtime = resolve_runtime_contract({
+        "enabled_platforms": ["paper"],
+        "agent": {"asset_pairs": ["BTCUSD"]},
+    })
+
+    assert runtime.paper_execution_enabled is True
+    assert runtime.paper_only_runtime is True
+    assert runtime.crypto_only_runtime is True
+    assert runtime.enabled_platforms == frozenset({"paper"})
+
+
+def test_resolve_runtime_contract_uses_config_flags_for_mixed_runtime() -> None:
+    runtime = resolve_runtime_contract({
+        "enabled_platforms": ["paper", "coinbase_advanced"],
+        "paper_trading_defaults": {"enabled": True},
+        "agent": {"asset_pairs": ["BTCUSD"]},
+    })
+
+    assert runtime.paper_execution_enabled is True
+    assert runtime.paper_only_runtime is False
+    assert runtime.crypto_only_runtime is True

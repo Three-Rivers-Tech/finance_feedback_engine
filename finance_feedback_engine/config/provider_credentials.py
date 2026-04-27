@@ -6,6 +6,10 @@ from dataclasses import dataclass
 from typing import Any, Dict, Iterable, Optional
 
 
+CRYPTO_MARKERS = ("BTC", "ETH", "SOL", "DOGE", "ADA", "DOT", "LINK")
+FIAT_MARKERS = ("EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD")
+
+
 @dataclass(frozen=True)
 class ProviderCredentials:
     """Resolved credential payloads for external providers."""
@@ -15,19 +19,51 @@ class ProviderCredentials:
     paper: Optional[Dict[str, Any]]
 
 
-def _is_crypto_only_runtime(config: Dict[str, Any]) -> bool:
-    enabled_platforms = {str(name).lower() for name in (config.get("enabled_platforms") or [])}
+@dataclass(frozen=True)
+class RuntimeContract:
+    """Canonical resolved runtime/config contract for platform routing."""
+
+    enabled_platforms: frozenset[str]
+    paper_execution_enabled: bool
+    paper_only_runtime: bool
+    crypto_only_runtime: bool
+
+
+def resolve_runtime_contract(config: Dict[str, Any]) -> RuntimeContract:
+    """Resolve the canonical runtime flags used across execution and data consumers."""
+    enabled_platforms = frozenset(
+        str(name).lower() for name in (config.get("enabled_platforms") or []) if name
+    )
+    paper_defaults = (config.get("paper_trading_defaults") or {})
+    paper_cfg = (config.get("paper_trading") or {})
+    feature_flags = (config.get("features") or {})
+    paper_execution_enabled = bool(
+        paper_defaults.get("enabled")
+        or paper_cfg.get("enabled")
+        or feature_flags.get("paper_trading_mode")
+        or enabled_platforms == {"paper"}
+    )
+
     agent_cfg = config.get("agent") or {}
     pairs = [str(p).upper() for p in (agent_cfg.get("asset_pairs") or [])]
-    if not pairs:
-        return False
-    crypto_markers = ("BTC", "ETH", "SOL", "DOGE", "ADA", "DOT", "LINK")
-    fiat_markers = ("EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD")
-    crypto_only_pairs = all(
-        any(sym in pair for sym in crypto_markers) and not any(code in pair for code in fiat_markers)
+    crypto_only_pairs = bool(pairs) and all(
+        any(sym in pair for sym in CRYPTO_MARKERS)
+        and not any(code in pair for code in FIAT_MARKERS)
         for pair in pairs
     )
-    return crypto_only_pairs and (not enabled_platforms or 'oanda' not in enabled_platforms)
+    crypto_only_runtime = crypto_only_pairs and (
+        not enabled_platforms or "oanda" not in enabled_platforms
+    )
+    paper_only_runtime = enabled_platforms == frozenset({"paper"}) or (
+        paper_execution_enabled and enabled_platforms == frozenset()
+    )
+
+    return RuntimeContract(
+        enabled_platforms=enabled_platforms,
+        paper_execution_enabled=paper_execution_enabled,
+        paper_only_runtime=paper_only_runtime,
+        crypto_only_runtime=crypto_only_runtime,
+    )
 
 
 def resolve_provider_credentials(config: Dict[str, Any]) -> ProviderCredentials:
@@ -71,7 +107,8 @@ def resolve_provider_credentials(config: Dict[str, Any]) -> ProviderCredentials:
             names={"paper", "mock", "sandbox"},
         )
 
-    if _is_crypto_only_runtime(config):
+    runtime = resolve_runtime_contract(config)
+    if runtime.crypto_only_runtime:
         oanda_credentials = None
 
     return ProviderCredentials(

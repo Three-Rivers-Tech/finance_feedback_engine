@@ -26,7 +26,7 @@ from .monitoring.trade_outcome_recorder import TradeOutcomeRecorder
 from .monitoring.pending_linkage_store import PendingLinkageStore
 from .observability.metrics import create_counters, get_meter
 from .persistence.decision_store import DecisionStore
-from .config.provider_credentials import resolve_provider_credentials
+from .config.provider_credentials import resolve_provider_credentials, resolve_runtime_contract
 from .security.validator import validate_at_startup
 from .trading_platforms.platform_factory import PlatformFactory
 from .utils.credential_validator import validate_credentials
@@ -149,18 +149,11 @@ class FinanceFeedbackEngine:
         # UnifiedDataProvider cannot initialize Oanda and forex price lookups
         # silently fall back to stale non-exchange data.
         provider_credentials = resolve_provider_credentials(config)
-        enabled_platforms = {str(name).lower() for name in (config.get("enabled_platforms") or [])}
-        agent_cfg = config.get("agent") or {}
-        asset_pairs = [str(p).upper() for p in (agent_cfg.get("asset_pairs") or [])]
-        crypto_markers = ("BTC", "ETH", "SOL", "DOGE", "ADA", "DOT", "LINK")
-        fiat_markers = ("EUR", "GBP", "JPY", "CHF", "AUD", "NZD", "CAD")
-        crypto_only_runtime = bool(asset_pairs) and all(
-            any(sym in pair for sym in crypto_markers) and not any(code in pair for code in fiat_markers)
-            for pair in asset_pairs
-        )
+        runtime_contract = resolve_runtime_contract(config)
+        enabled_platforms = runtime_contract.enabled_platforms
         coinbase_credentials = provider_credentials.coinbase
         oanda_credentials = provider_credentials.oanda
-        if crypto_only_runtime and enabled_platforms and 'oanda' not in enabled_platforms:
+        if runtime_contract.crypto_only_runtime:
             oanda_credentials = None
 
         self.unified_provider = UnifiedDataProvider(
@@ -176,7 +169,7 @@ class FinanceFeedbackEngine:
         platform_name = config.get("trading_platform", "coinbase")
 
         paper_defaults = (config.get("paper_trading_defaults") or {})
-        paper_enabled = bool(paper_defaults.get("enabled"))
+        paper_enabled = runtime_contract.paper_execution_enabled
         try:
             paper_initial_cash = float(paper_defaults.get("initial_cash_usd", 10000.0))
         except (ValueError, TypeError) as e:
@@ -263,7 +256,7 @@ class FinanceFeedbackEngine:
                         continue
                     unified_credentials["coinbase"] = platform_creds
                 elif platform_key == "oanda":
-                    if (crypto_only_runtime and enabled_platforms and 'oanda' not in enabled_platforms) or (
+                    if runtime_contract.crypto_only_runtime or (
                         paper_enabled and (
                             not platform_creds
                             or any(_is_placeholder(v) for v in platform_creds.values())

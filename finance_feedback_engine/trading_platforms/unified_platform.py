@@ -11,6 +11,7 @@ from finance_feedback_engine.exceptions import TradingError
 
 from .base_platform import BaseTradingPlatform, PositionInfo, PositionsResponse
 from .coinbase_platform import CoinbaseAdvancedPlatform
+from ..config.provider_credentials import resolve_runtime_contract
 from .mock_platform import MockTradingPlatform
 from .oanda_platform import OandaPlatform
 
@@ -99,15 +100,8 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
         self._paper_execution_enabled = self._is_paper_execution_enabled()
 
     def _is_paper_execution_enabled(self) -> bool:
-        """Return True when config explicitly enables paper/mock execution routing."""
-        paper_defaults = (self.config.get("paper_trading_defaults") or {})
-        paper_cfg = (self.config.get("paper_trading") or {})
-        feature_flags = (self.config.get("features") or {})
-        return bool(
-            paper_defaults.get("enabled")
-            or paper_cfg.get("enabled")
-            or feature_flags.get("paper_trading_mode")
-        )
+        """Return True when the resolved runtime contract enables paper execution."""
+        return resolve_runtime_contract(self.config).paper_execution_enabled
 
     def _resolve_target_platform_name(self, asset_class: str) -> str | None:
         """Pick the execution venue for a decision."""
