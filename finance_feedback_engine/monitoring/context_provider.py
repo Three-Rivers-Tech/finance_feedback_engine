@@ -2,11 +2,109 @@
 
 import json
 import logging
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
+
+from finance_feedback_engine.utils.shape_normalization import extract_portfolio_positions
 from typing import Any, Dict, List, Optional
 
+from finance_feedback_engine.decision_engine.policy_actions import (
+    get_policy_action_family,
+    get_legacy_action_compatibility,
+    is_policy_action,
+    normalize_policy_action,
+)
+
 logger = logging.getLogger(__name__)
+
+
+def _coerce_monitoring_float(value: Any, default: float = 0.0) -> float:
+    """Best-effort numeric coercion for monitoring payloads/tests."""
+    try:
+        if value is None or value == "":
+            return float(default)
+        return float(value)
+    except (TypeError, ValueError):
+        return float(default)
+
+
+def _normalize_asset_key(value: Any) -> str:
+    """Normalize asset identifiers (BTC-USD/BTC_USD/BTCUSD) into BTCUSD form."""
+    return str(value or "").upper().replace("-", "").replace("_", "").strip()
+
+
+from finance_feedback_engine.utils.product_id import product_id_to_asset_pair as _pid_to_pair
+
+
+def _position_asset_keys(pos: Dict[str, Any]) -> set[str]:
+    """Return candidate canonical asset keys for a position payload."""
+    keys: set[str] = set()
+    for field in ("asset_pair", "product_id", "instrument", "symbol", "asset"):
+        raw = str(pos.get(field) or "").strip().upper()
+        if not raw:
+            continue
+        normalized = _normalize_asset_key(raw)
+        if normalized:
+            keys.add(normalized)
+        cfm_resolved = _pid_to_pair(raw)
+        if cfm_resolved:
+            keys.add(cfm_resolved)
+        if "_" in raw and "-" not in raw:
+            parts = raw.split("_")
+            if len(parts) == 2:
+                keys.add(_normalize_asset_key("".join(parts)))
+    return keys
+
+
+def _estimate_position_notional_usd(pos: Dict[str, Any]) -> float:
+    """Best-effort USD notional estimate for monitoring/risk math."""
+    contracts = abs(_coerce_monitoring_float(pos.get("contracts", 0) or pos.get("number_of_contracts", 0) or pos.get("units", 0) or pos.get("amount", 0) or pos.get("size", 0), 0.0))
+    if contracts <= 0:
+        return 0.0
+    explicit_value = _coerce_monitoring_float(pos.get("notional_value") or pos.get("value_usd") or pos.get("usd_value"), 0.0)
+    if explicit_value > 0:
+        return abs(explicit_value)
+    current_price = _coerce_monitoring_float(pos.get("current_price") or pos.get("mark_price") or pos.get("price"), 0.0)
+    if current_price <= 0:
+        return 0.0
+    contract_size = _coerce_monitoring_float(pos.get("contract_size") or pos.get("contract_multiplier"), 1.0)
+    if contract_size <= 0:
+        contract_size = 1.0
+    return contracts * current_price * contract_size
+
+
+def enforce_slot_constraints(decision: Dict[str, Any], context: Optional[Dict[str, Any]]) -> Dict[str, Any]:
+    """Prevent slot-consuming entry actions when monitoring context says no trade slots remain."""
+    if not decision or not context:
+        return decision
+
+    normalized = dict(decision)
+    raw_action = normalized.get("policy_action") or normalized.get("action")
+    action = str(raw_action or "").upper()
+    slots_available = context.get("slots_available")
+
+    try:
+        slots_value = int(slots_available)
+    except (TypeError, ValueError):
+        return normalized
+
+    blocks_slot = False
+    if is_policy_action(action):
+        family = get_policy_action_family(normalize_policy_action(action))
+        blocks_slot = family in {"open_long", "open_short"}
+    else:
+        blocks_slot = action == "BUY"
+
+    if blocks_slot and slots_value <= 0:
+        normalized["action"] = "HOLD"
+        normalized["policy_action"] = "HOLD"
+        normalized.setdefault(
+            "override_reason",
+            "Entry blocked by slot enforcement: no monitoring/trade slots available.",
+        )
+        normalized.setdefault("quality_flag", "slot_constrained")
+
+    return normalized
 
 
 class MonitoringContextProvider:
@@ -46,6 +144,66 @@ class MonitoringContextProvider:
 
         logger.info("MonitoringContextProvider initialized")
 
+    async def get_monitoring_context_async(
+        self, asset_pair: Optional[str] = None, lookback_hours: int = 24
+    ) -> Dict[str, Any]:
+        """Async variant of get_monitoring_context to avoid blocking the event loop."""
+        context = {
+            "timestamp": datetime.now(UTC).isoformat(),
+            "has_monitoring_data": False,
+            "active_positions": {"futures": []},
+            "active_trades_count": 0,
+            "recent_performance": {},
+            "risk_metrics": {},
+            "position_concentration": {},
+            "multi_timeframe_pulse": None,
+        }
+
+        try:
+            if hasattr(self.platform, "aget_portfolio_breakdown"):
+                portfolio = await self.platform.aget_portfolio_breakdown()
+
+                futures_positions, holdings = self._extract_active_positions_from_portfolio(portfolio)
+
+                if asset_pair:
+                    futures_positions = self._filter_positions_by_asset(
+                        futures_positions, asset_pair
+                    )
+                    holdings = [h for h in holdings if asset_pair in h.get("asset", "")]
+
+                context["active_positions"] = {
+                    "futures": futures_positions,
+                    "spot": holdings,
+                }
+                context["has_monitoring_data"] = True
+
+            # Active trades count from monitor
+            if self.trade_monitor:
+                context["active_trades_count"] = len(self.trade_monitor.active_trackers)
+
+            # Recent performance from metrics collector
+            if self.metrics_collector:
+                recent_metrics = self.metrics_collector.get_recent_metrics(
+                    hours=lookback_hours, asset_pair=asset_pair
+                )
+                context["recent_performance"] = recent_metrics
+
+            # Risk metrics
+            context["risk_metrics"] = self._calculate_risk_metrics_from_dict(
+                portfolio if hasattr(self.platform, "aget_portfolio_breakdown") else {}
+            )
+
+            # Position concentration
+            context["position_concentration"] = self._calculate_concentration_from_dict(
+                portfolio if hasattr(self.platform, "aget_portfolio_breakdown") else {}
+            )
+
+        except Exception as e:
+            logger.error(f"Error getting async monitoring context: {e}", exc_info=True)
+            context["error"] = str(e)
+
+        return context
+
     def get_monitoring_context(
         self, asset_pair: Optional[str] = None, lookback_hours: int = 24
     ) -> Dict[str, Any]:
@@ -64,33 +222,40 @@ class MonitoringContextProvider:
             - risk_metrics: Exposure and risk analysis
             - position_concentration: Asset allocation breakdown
         """
+        context_timestamp = datetime.now(UTC).isoformat()
         context = {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": context_timestamp,
+            "latest_market_data_timestamp": context_timestamp,
+            "market_data_timestamp": context_timestamp,
+            "asset_type": "crypto",
+            "timeframe": "intraday",
+            "market_status": None,
             "has_monitoring_data": False,
             "active_positions": {"futures": []},
             "active_trades_count": 0,
             "recent_performance": {},
             "risk_metrics": {},
             "position_concentration": {},
+            "portfolio_breakdown": {},
             "multi_timeframe_pulse": None,  # Multi-TF technical indicators
         }
 
         try:
             # Get active positions from platform
             if hasattr(self.platform, "get_portfolio_breakdown"):
+                # Use sync method for backward compatibility
                 portfolio = self.platform.get_portfolio_breakdown()
 
+                context["portfolio_breakdown"] = portfolio
+
                 # Extract active positions
-                futures_positions = portfolio.get("futures_positions", [])
-                holdings = portfolio.get("holdings", [])
+                futures_positions, holdings = self._extract_active_positions_from_portfolio(portfolio)
 
                 # Filter by asset pair if specified
                 if asset_pair:
-                    futures_positions = [
-                        p
-                        for p in futures_positions
-                        if asset_pair in p.get("product_id", "")
-                    ]
+                    futures_positions = self._filter_positions_by_asset(
+                        futures_positions, asset_pair
+                    )
                     holdings = [h for h in holdings if asset_pair in h.get("asset", "")]
 
                 context["active_positions"] = {
@@ -110,8 +275,40 @@ class MonitoringContextProvider:
 
                 context["has_monitoring_data"] = True
 
+        except ConnectionError as e:
+            logger.error(
+                "Failed to fetch active positions - connection error",
+                extra={
+                    "asset_pair": asset_pair,
+                    "error": str(e),
+                    "error_type": "connection",
+                    "platform_type": type(self.platform).__name__ if self.platform else "None"
+                },
+                exc_info=True
+            )
+            # TODO: Alert on repeated position fetch failures (THR-XXX)
+        except (ValueError, TypeError, KeyError) as e:
+            logger.warning(
+                "Failed to fetch active positions - data validation error",
+                extra={
+                    "asset_pair": asset_pair,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "platform_type": type(self.platform).__name__ if self.platform else "None"
+                }
+            )
         except Exception as e:
-            logger.warning(f"Could not fetch active positions: {e}")
+            logger.error(
+                "Failed to fetch active positions - unexpected error",
+                extra={
+                    "asset_pair": asset_pair,
+                    "error": str(e),
+                    "error_type": type(e).__name__,
+                    "platform_type": type(self.platform).__name__ if self.platform else "None"
+                },
+                exc_info=True
+            )
+            # TODO: Monitor unexpected context provider errors (THR-XXX)
 
         # Get active trade monitoring data
         if self.trade_monitor:
@@ -124,8 +321,27 @@ class MonitoringContextProvider:
                     self.trade_monitor.MAX_CONCURRENT_TRADES
                     - len(self.trade_monitor.active_trackers)
                 )
+            except (AttributeError, TypeError) as e:
+                logger.warning(
+                    "Failed to fetch active trades - attribute error",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "has_trade_monitor": bool(self.trade_monitor)
+                    }
+                )
             except Exception as e:
-                logger.warning(f"Could not fetch active trades: {e}")
+                logger.error(
+                    "Failed to fetch active trades - unexpected error",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    },
+                    exc_info=True
+                )
+                # TODO: Monitor trade monitor access errors (THR-XXX)
 
         # Get recent performance metrics
         if self.metrics_collector:
@@ -133,8 +349,29 @@ class MonitoringContextProvider:
                 context["recent_performance"] = self._get_recent_performance(
                     asset_pair, lookback_hours
                 )
+            except (ValueError, TypeError, KeyError) as e:
+                logger.warning(
+                    "Failed to fetch recent performance - data validation error",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "lookback_hours": lookback_hours,
+                        "error": str(e),
+                        "error_type": type(e).__name__,
+                        "has_metrics_collector": bool(self.metrics_collector)
+                    }
+                )
             except Exception as e:
-                logger.warning(f"Could not fetch recent performance: {e}")
+                logger.error(
+                    "Failed to fetch recent performance - unexpected error",
+                    extra={
+                        "asset_pair": asset_pair,
+                        "lookback_hours": lookback_hours,
+                        "error": str(e),
+                        "error_type": type(e).__name__
+                    },
+                    exc_info=True
+                )
+                # TODO: Monitor metrics collector errors (THR-XXX)
 
         # Get multi-timeframe pulse from TradeMonitor (if configured)
         if self.trade_monitor and asset_pair:
@@ -142,6 +379,14 @@ class MonitoringContextProvider:
                 pulse = self.trade_monitor.get_latest_market_context(asset_pair)
                 if pulse:
                     context["multi_timeframe_pulse"] = pulse
+                    pulse_asset_type = pulse.get("asset_type", context["asset_type"])
+                    pulse_timestamp = pulse.get("latest_market_data_timestamp") or pulse.get("market_data_timestamp")
+                    if pulse_timestamp and str(pulse_asset_type).lower() != "crypto":
+                        context["latest_market_data_timestamp"] = pulse_timestamp
+                        context["market_data_timestamp"] = pulse_timestamp
+                    context["asset_type"] = pulse_asset_type
+                    context["timeframe"] = pulse.get("timeframe", context["timeframe"])
+                    context["market_status"] = pulse.get("market_status", context["market_status"])
                     context["has_monitoring_data"] = True
                     logger.debug(
                         f"Fetched multi-timeframe pulse for {asset_pair}: "
@@ -151,6 +396,52 @@ class MonitoringContextProvider:
                 logger.warning(f"Could not fetch multi-timeframe pulse: {e}")
 
         return context
+
+    def _extract_active_positions_from_portfolio(self, portfolio: Dict[str, Any]) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """Extract active futures/spot positions from either flat or platform_breakdowns shapes."""
+        return extract_portfolio_positions(portfolio)
+
+    def _get_active_portfolio_breakdown(
+        self, portfolio: Dict[str, Any]
+    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
+        """Resolve the active execution breakdown/futures summary from portfolio metadata."""
+        platform_breakdowns = portfolio.get("platform_breakdowns") or {}
+        if not isinstance(platform_breakdowns, dict) or not platform_breakdowns:
+            return {}, {}
+
+        active_name = str(portfolio.get("active_execution_platform") or "").lower()
+        active_breakdown = {}
+        if active_name:
+            active_breakdown = platform_breakdowns.get(active_name) or {}
+        if not active_breakdown:
+            active_breakdown = portfolio.get("active_platform_breakdown") or {}
+        if not active_breakdown and platform_breakdowns:
+            _, active_breakdown = next(iter(platform_breakdowns.items()))
+
+        active_breakdown = active_breakdown or {}
+        return active_breakdown, (active_breakdown.get("futures_summary") or {})
+
+    def _filter_positions_by_asset(
+        self, positions: List[Dict[str, Any]], asset_pair: str
+    ) -> List[Dict[str, Any]]:
+        """Filter positions matching an asset pair, handling CFM/INTX product ID formats.
+
+        CFM products use non-obvious IDs like BIP-20DEC30-CDE for BTC perpetuals.
+        This maps product prefixes to base assets for correct matching.
+        """
+        base = asset_pair.replace("-", "").replace("USD", "").replace("USDC", "").upper()
+        matched = []
+        for p in positions:
+            pid = p.get("product_id", "")
+            if asset_pair in pid:
+                matched.append(p)
+            else:
+                pid_canonical = _pid_to_pair(pid)
+                if pid_canonical and pid_canonical.replace("USD", "") == base:
+                    matched.append(p)
+                elif base in pid.upper():
+                    matched.append(p)
+        return matched
 
     def _calculate_risk_metrics(
         self, futures_positions: List[Dict[str, Any]], portfolio: Dict[str, Any]
@@ -173,20 +464,34 @@ class MonitoringContextProvider:
         short_exposure = 0.0
 
         for pos in futures_positions:
-            contracts = pos.get("contracts", 0)
-            current_price = pos.get("current_price", 0)
-            side = pos.get("side", "LONG")
-
-            notional = abs(contracts * current_price)
+            side = str(pos.get("side", "LONG")).upper()
+            notional = _estimate_position_notional_usd(pos)
             total_exposure += notional
-            unrealized_pnl += pos.get("unrealized_pnl", 0)
+            unrealized_pnl += _coerce_monitoring_float(pos.get("unrealized_pnl", 0), 0.0)
 
             if side == "LONG":
                 long_exposure += notional
             else:
                 short_exposure += notional
 
-        total_value = portfolio.get("total_value_usd", 1)
+        total_value = _coerce_monitoring_float(portfolio.get("total_value_usd", 0), 0.0)
+        summary_unrealized = None
+        if total_value <= 0:
+            active_breakdown, futures_summary = self._get_active_portfolio_breakdown(
+                portfolio
+            )
+            total_value = _coerce_monitoring_float(
+                futures_summary.get("total_balance_usd", 0)
+                or active_breakdown.get("total_value_usd", 0)
+                or portfolio.get("total_balance_usd", 0),
+                0.0,
+            )
+            if futures_summary.get("unrealized_pnl") is not None:
+                summary_unrealized = _coerce_monitoring_float(
+                    futures_summary.get("unrealized_pnl"), 0.0
+                )
+        if summary_unrealized is not None:
+            unrealized_pnl = summary_unrealized
         leverage = total_exposure / total_value if total_value > 0 else 0
 
         return {
@@ -210,8 +515,12 @@ class MonitoringContextProvider:
             - top_3_concentration: % in top 3 positions
             - diversification_score: 0-100 (higher = more diversified)
         """
-        futures_positions = portfolio.get("futures_positions", [])
-        total_value = portfolio.get("total_value_usd", 1)
+        futures_positions, _ = self._extract_active_positions_from_portfolio(portfolio)
+        total_value = _coerce_monitoring_float(portfolio.get("total_value_usd", 1), 1.0)
+        if total_value <= 0:
+            for pdata in (portfolio.get("platform_breakdowns") or {}).values():
+                if isinstance(pdata, dict):
+                    total_value = _coerce_monitoring_float(pdata.get("total_value_usd", 0.0), 0.0) or total_value
 
         if not futures_positions or total_value <= 0:
             return {
@@ -221,14 +530,44 @@ class MonitoringContextProvider:
                 "diversification_score": 0,
             }
 
-        # Calculate position sizes as % of portfolio
+        # Calculate position sizes as % of portfolio and keep per-asset breakdown.
+        # For Coinbase futures margin accounts, normalize concentration against
+        # the account's initial margin usage rather than raw notional/account-equity.
+        # This keeps concentration on the same basis as the futures-aware leverage gate.
         position_sizes = []
+        asset_position_pct: Dict[str, float] = {}
+        position_notionals = []
         for pos in futures_positions:
-            contracts = abs(pos.get("contracts", 0))
-            current_price = pos.get("current_price", 0)
-            notional = contracts * current_price
+            notional = _estimate_position_notional_usd(pos)
+            if notional <= 0:
+                continue
+            position_notionals.append((pos, notional))
+
+        total_notional = sum(notional for _, notional in position_notionals)
+        futures_summary = portfolio.get("futures_summary") or {}
+        if not futures_summary:
+            for pdata in (portfolio.get("platform_breakdowns") or {}).values():
+                if isinstance(pdata, dict) and pdata.get("futures_summary"):
+                    futures_summary = pdata.get("futures_summary") or {}
+                    break
+
+        initial_margin = _coerce_monitoring_float(
+            futures_summary.get("initial_margin") or portfolio.get("initial_margin"),
+            0.0,
+        )
+        total_margin_usage_pct = (
+            (initial_margin / total_value) * 100
+            if initial_margin > 0 and total_value > 0 and total_notional > 0
+            else 0.0
+        )
+
+        for pos, notional in position_notionals:
             pct = (notional / total_value) * 100
+            if total_margin_usage_pct > 0:
+                pct = (notional / total_notional) * total_margin_usage_pct
             position_sizes.append(pct)
+            for asset_key in _position_asset_keys(pos):
+                asset_position_pct[asset_key] = max(asset_position_pct.get(asset_key, 0.0), pct)
 
         position_sizes.sort(reverse=True)
 
@@ -245,6 +584,7 @@ class MonitoringContextProvider:
             "largest_position_pct": largest_pct,
             "top_3_concentration": top_3_pct,
             "diversification_score": diversification,
+            "asset_position_pct": asset_position_pct,
         }
 
     def _get_recent_performance(
@@ -269,7 +609,7 @@ class MonitoringContextProvider:
             if not metrics_dir.exists():
                 return {}
 
-            cutoff_time = datetime.utcnow() - timedelta(hours=lookback_hours)
+            cutoff_time = datetime.now(UTC) - timedelta(hours=lookback_hours)
             recent_trades = []
 
             for metric_file in metrics_dir.glob("trade_*.json"):
@@ -507,19 +847,45 @@ class MonitoringContextProvider:
 
         lines = ["\n=== LIVE TRADING CONTEXT ==="]
 
-        # Active positions summary
+        # Position-awareness directives should appear before raw data so they don't
+        # get lost in the middle of a long prompt.
         active_pos = context.get("active_positions", {})
         futures = active_pos.get("futures", [])
+        slots_available = int(_coerce_monitoring_float(context.get("slots_available"), 0))
+        active_trades = int(_coerce_monitoring_float(context.get("active_trades_count"), 0))
 
+        if futures:
+            lines.extend([
+                "",
+                "=== POSITION AWARENESS DIRECTIVES ===",
+                "- Respect live position context before proposing any action.",
+                "- HOLD = maintain current exposure when the thesis is intact.",
+                "- REDUCE_* / CLOSE_* = trim or fully exit exposure when risk, invalidation, or adverse momentum dominates.",
+                "- OPEN_* = initiate new exposure only when slots are available, confidence is strong, and risk is justified.",
+                "- ADD_* = scale an existing same-side position only when conviction and risk budget clearly justify it.",
+                "- Explicitly weigh confidence, risk, and active exposure in your recommendation.",
+            ])
+            if slots_available <= 0:
+                lines.append("- Monitoring capacity is full, so do NOT recommend OPEN_* actions until a slot opens.")
+            else:
+                lines.append(
+                    f"- {slots_available} monitoring slot(s) remain; OPEN_* actions are allowed only with high confidence and clear risk control."
+                )
+
+        # Active positions summary
         if futures:
             lines.append(f"\nActive Positions: {len(futures)}")
             for pos in futures:
                 side = pos.get("side", "UNKNOWN")
                 product = pos.get("product_id", "N/A")
-                contracts = pos.get("contracts", 0)
-                entry = pos.get("entry_price", 0)
-                current = pos.get("current_price", 0)
-                pnl = pos.get("unrealized_pnl", 0)
+                contracts = _coerce_monitoring_float(
+                    pos.get("contracts", pos.get("number_of_contracts", 0))
+                )
+                entry = _coerce_monitoring_float(
+                    pos.get("entry_price", pos.get("avg_entry_price", 0))
+                )
+                current = _coerce_monitoring_float(pos.get("current_price", 0))
+                pnl = _coerce_monitoring_float(pos.get("unrealized_pnl", 0))
 
                 pnl_sign = "+" if pnl >= 0 else ""
                 lines.append(
@@ -535,11 +901,17 @@ class MonitoringContextProvider:
         if risk:
             lines.append("\nRisk Exposure:")
             lines.append(
-                f"  • Total Exposure: ${risk.get('total_exposure_usd', 0):,.2f}"
+                f"  • Total Exposure: ${_coerce_monitoring_float(risk.get('total_exposure_usd', 0)):,.2f}"
             )
-            lines.append(f"  • Unrealized P&L: ${risk.get('unrealized_pnl', 0):,.2f}")
-            lines.append(f"  • Leverage: {risk.get('leverage_estimate', 0):.2f}x")
-            lines.append(f"  • Net Exposure: ${risk.get('net_exposure', 0):,.2f}")
+            lines.append(
+                f"  • Unrealized P&L: ${_coerce_monitoring_float(risk.get('unrealized_pnl', 0)):,.2f}"
+            )
+            lines.append(
+                f"  • Leverage: {_coerce_monitoring_float(risk.get('leverage_estimate', 0)):.2f}x"
+            )
+            lines.append(
+                f"  • Net Exposure: ${_coerce_monitoring_float(risk.get('net_exposure', 0)):,.2f}"
+            )
 
         # Position concentration
         conc = context.get("position_concentration", {})
@@ -547,20 +919,20 @@ class MonitoringContextProvider:
             lines.append("\nPosition Concentration:")
             lines.append(
                 f"  • Largest Position: "
-                f"{conc.get('largest_position_pct', 0):.1f}% of portfolio"
+                f"{_coerce_monitoring_float(conc.get('largest_position_pct', 0)):.1f}% of portfolio"
             )
             lines.append(
                 f"  • Diversification Score: "
-                f"{conc.get('diversification_score', 0):.0f}/100"
+                f"{_coerce_monitoring_float(conc.get('diversification_score', 0)):.0f}/100"
             )
 
         # Active trade slots
         if context.get("max_concurrent_trades"):
             lines.append(
                 f"\nMonitoring Capacity: "
-                f"{context.get('active_trades_count', 0)}/"
-                f"{context.get('max_concurrent_trades', 0)} slots used "
-                f"({context.get('slots_available', 0)} available)"
+                f"{active_trades}/"
+                f"{int(_coerce_monitoring_float(context.get('max_concurrent_trades', 0), 0))} slots used "
+                f"({slots_available} available)"
             )
 
         # Recent performance
@@ -571,11 +943,11 @@ class MonitoringContextProvider:
             )
             lines.append(
                 f"  • Trades: {perf.get('trades_count', 0)} "
-                f"| Win Rate: {perf.get('win_rate', 0):.1f}%"
+                f"| Win Rate: {_coerce_monitoring_float(perf.get('win_rate', 0)):.1f}%"
             )
             lines.append(
-                f"  • Total P&L: ${perf.get('total_pnl', 0):,.2f} "
-                f"| Avg: ${perf.get('avg_pnl', 0):.2f}"
+                f"  • Total P&L: ${_coerce_monitoring_float(perf.get('total_pnl', 0)):,.2f} "
+                f"| Avg: ${_coerce_monitoring_float(perf.get('avg_pnl', 0)):.2f}"
             )
 
         lines.append("=" * 30 + "\n")
