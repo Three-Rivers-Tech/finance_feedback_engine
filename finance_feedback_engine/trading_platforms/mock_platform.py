@@ -140,11 +140,7 @@ class MockTradingPlatform(BaseTradingPlatform):
             raise RuntimeError("Simulated platform error")
 
         logger.debug("MockPlatform.get_balance() called: %s", self._balance)
-        # Ensure a base currency key exists for callers/tests expecting it.
-        result = self._balance.copy()
-        if "USD" not in result and "SPOT_USD" not in result:
-            result["USD"] = float(result.get("SPOT_USD", 0) or 0)
-        return result
+        return self._balance.copy()
 
     def execute_trade(self, decision: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -781,8 +777,6 @@ class MockTradingPlatform(BaseTradingPlatform):
         else:
             self._balance = {
                 "FUTURES_USD": 10000.0,
-                "SPOT_USD": 5000.0,
-                "SPOT_USDC": 3000.0,
             }
 
         self._positions.clear()

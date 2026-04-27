@@ -214,9 +214,7 @@ class FinanceFeedbackEngine:
             def _build_paper_balance(cash: float) -> Dict[str, float]:
                 cash = float(cash)
                 return {
-                    "FUTURES_USD": round(cash * 0.6, 2),
-                    "SPOT_USD": round(cash * 0.3, 2),
-                    "SPOT_USDC": round(cash * 0.1, 2),
+                    "FUTURES_USD": round(cash, 2),
                 }
 
             def _is_placeholder(value: Any) -> bool:

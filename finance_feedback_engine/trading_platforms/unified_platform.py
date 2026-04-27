@@ -84,9 +84,7 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                     }
             else:
                 initial_balance = {
-                    "FUTURES_USD": 6000.0,
-                    "SPOT_USD": 3000.0,
-                    "SPOT_USDC": 1000.0,
+                    "FUTURES_USD": 10000.0,
                 }
 
             logger.info("Initializing paper trading platform for unified access.")

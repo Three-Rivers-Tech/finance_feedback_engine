@@ -56,6 +56,9 @@ async def test_status_includes_dev_portfolio_breakdown(monkeypatch, paper_tradin
     assert status.portfolio is not None
     assert status.portfolio_value is not None
     assert status.portfolio.get("total_value_usd") is not None
+    assert status.balances == {"paper_FUTURES_USD": 10000.0}
+    assert status.portfolio.get("spot_value_usd") == 0.0
+    assert status.portfolio.get("futures_value_usd") == 10000.0
     assert status.active_positions == 0
 
 
