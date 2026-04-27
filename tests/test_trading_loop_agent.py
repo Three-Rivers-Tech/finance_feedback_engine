@@ -1506,6 +1506,7 @@ async def test_hold_decision_already_persisted_upstream_updates_instead_of_savin
 
 def test_log_portfolio_risk_snapshot_summarizes_positions_and_balance(trading_agent, caplog):
     snapshot = {
+        "active_execution_platform": "coinbase",
         "platform_breakdowns": {
             "coinbase": {
                 "futures_positions": [
@@ -3018,3 +3019,64 @@ async def test_execution_state_passes_modified_decision_for_derisking_metadata(t
         modified_decision=decision,
     )
     assert decision["execution_status"] == "executed"
+
+
+def test_log_portfolio_risk_snapshot_uses_active_paper_breakdown(trading_agent, caplog):
+    snapshot = {
+        "active_execution_platform": "paper",
+        "platform_breakdowns": {
+            "paper": {
+                "futures_positions": [],
+                "futures_summary": {
+                    "total_balance_usd": 250000.0,
+                    "buying_power": 500000.0,
+                    "unrealized_pnl": 0.0,
+                    "initial_margin": 0.0,
+                },
+                "total_value_usd": 250000.0,
+            }
+        },
+    }
+
+    with caplog.at_level(logging.INFO):
+        trading_agent._log_portfolio_risk_snapshot("Portfolio risk snapshot (decision loop)", snapshot)
+
+    assert "total_balance=$250000.00" in caplog.text
+    assert "buying_power=$500000.00" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_process_cycle_logs_active_paper_portfolio_risk_snapshot(trading_agent, mock_dependencies, caplog):
+    mock_dependencies["engine"].get_portfolio_breakdown_async = AsyncMock(
+        return_value={
+            "active_execution_platform": "paper",
+            "platform_breakdowns": {
+                "paper": {
+                    "futures_positions": [],
+                    "futures_summary": {
+                        "total_balance_usd": 250000.0,
+                        "buying_power": 500000.0,
+                        "unrealized_pnl": 0.0,
+                        "initial_margin": 0.0,
+                    },
+                    "total_value_usd": 250000.0,
+                }
+            },
+        }
+    )
+    mock_dependencies["engine"].analyze_asset_async = AsyncMock(
+        return_value={
+            "id": "decision-paper-hold",
+            "action": "HOLD",
+            "confidence": 50,
+            "asset_pair": "BTCUSD",
+        }
+    )
+    trading_agent.is_running = True
+
+    with caplog.at_level(logging.INFO):
+        await trading_agent.process_cycle()
+
+    assert "Portfolio risk snapshot (decision loop)" in caplog.text
+    assert "total_balance=$250000.00" in caplog.text
+    assert "buying_power=$500000.00" in caplog.text

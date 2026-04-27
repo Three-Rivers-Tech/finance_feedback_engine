@@ -2235,22 +2235,28 @@ class TradingLoopAgent:
             candidate_positions = []
 
             if "platform_breakdowns" in portfolio_snapshot:
-                for name, pdata in portfolio_snapshot["platform_breakdowns"].items():
+                for pdata in portfolio_snapshot["platform_breakdowns"].values():
                     candidate_positions.extend(pdata.get("futures_positions", []))
                     candidate_positions.extend(pdata.get("positions", []))
-                    if str(name).lower() == "coinbase":
-                        try:
-                            fs = pdata.get("futures_summary", {}) or {}
-                            initial_margin = float(fs.get("initial_margin", 0.0) or 0.0)
-                            total_balance = float(
-                                fs.get("total_balance_usd", 0.0)
-                                or pdata.get("total_value_usd", 0.0)
-                                or 0.0
-                            )
-                            if total_balance > 0:
-                                margin_usage_pct = initial_margin / total_balance
-                        except Exception:
-                            pass
+
+                active_breakdown, active_futures_summary = self._get_active_portfolio_breakdown(
+                    portfolio_snapshot
+                )
+                try:
+                    initial_margin = float(
+                        active_futures_summary.get("initial_margin", 0.0) or 0.0
+                    )
+                    total_balance = float(
+                        active_futures_summary.get("total_balance_usd", 0.0)
+                        or active_breakdown.get("total_value_usd", 0.0)
+                        or portfolio_snapshot.get("total_balance_usd", 0.0)
+                        or portfolio_snapshot.get("total_value_usd", 0.0)
+                        or 0.0
+                    )
+                    if total_balance > 0:
+                        margin_usage_pct = initial_margin / total_balance
+                except Exception:
+                    pass
             else:
                 candidate_positions.extend(
                     portfolio_snapshot.get("futures_positions", [])
@@ -4590,6 +4596,32 @@ class TradingLoopAgent:
         }
         return self._normalize_decision_for_persistence(decision)
 
+    def _get_active_portfolio_breakdown(
+        self, portfolio_snapshot: Optional[Dict[str, Any]]
+    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
+        """Return the portfolio breakdown/futures summary for the active execution venue."""
+        portfolio_snapshot = portfolio_snapshot or {}
+        platform_breakdowns = portfolio_snapshot.get("platform_breakdowns") or {}
+        if not isinstance(platform_breakdowns, dict) or not platform_breakdowns:
+            return {}, {}
+
+        active_name = str(
+            portfolio_snapshot.get("active_execution_platform")
+            or ""
+        ).lower()
+        active_breakdown = {}
+        if active_name:
+            active_breakdown = platform_breakdowns.get(active_name) or {}
+        if not active_breakdown:
+            active_breakdown = (
+                portfolio_snapshot.get("active_platform_breakdown") or {}
+            )
+        if not active_breakdown and platform_breakdowns:
+            _, active_breakdown = next(iter(platform_breakdowns.items()))
+
+        active_breakdown = active_breakdown or {}
+        return active_breakdown, (active_breakdown.get("futures_summary") or {})
+
     def _log_portfolio_risk_snapshot(
         self,
         label: str,
@@ -4610,36 +4642,39 @@ class TradingLoopAgent:
             unrealized_pnl = 0.0
 
             if "platform_breakdowns" in portfolio_snapshot:
-                for platform_name, platform_data in (
+                for platform_data in (
                     portfolio_snapshot.get("platform_breakdowns") or {}
-                ).items():
+                ).values():
                     candidate_positions.extend(
                         (platform_data.get("futures_positions") or [])
                     )
                     candidate_positions.extend((platform_data.get("positions") or []))
-                    if str(platform_name).lower() == "coinbase":
-                        futures_summary = platform_data.get("futures_summary") or {}
-                        total_balance = float(
-                            futures_summary.get("total_balance_usd", 0.0)
-                            or platform_data.get("total_value_usd", 0.0)
-                            or total_balance
-                            or 0.0
-                        )
-                        buying_power = float(
-                            futures_summary.get("buying_power", 0.0)
-                            or buying_power
-                            or 0.0
-                        )
-                        initial_margin = float(
-                            futures_summary.get("initial_margin", 0.0)
-                            or initial_margin
-                            or 0.0
-                        )
-                        unrealized_pnl = float(
-                            futures_summary.get("unrealized_pnl", 0.0)
-                            or unrealized_pnl
-                            or 0.0
-                        )
+
+                active_breakdown, futures_summary = self._get_active_portfolio_breakdown(
+                    portfolio_snapshot
+                )
+                total_balance = float(
+                    futures_summary.get("total_balance_usd", 0.0)
+                    or active_breakdown.get("total_value_usd", 0.0)
+                    or portfolio_snapshot.get("total_balance_usd", 0.0)
+                    or portfolio_snapshot.get("total_value_usd", 0.0)
+                    or 0.0
+                )
+                buying_power = float(
+                    futures_summary.get("buying_power", 0.0)
+                    or portfolio_snapshot.get("buying_power", 0.0)
+                    or 0.0
+                )
+                initial_margin = float(
+                    futures_summary.get("initial_margin", 0.0)
+                    or portfolio_snapshot.get("initial_margin", 0.0)
+                    or 0.0
+                )
+                unrealized_pnl = float(
+                    futures_summary.get("unrealized_pnl", 0.0)
+                    or portfolio_snapshot.get("unrealized_pnl", 0.0)
+                    or 0.0
+                )
             else:
                 candidate_positions.extend(
                     (portfolio_snapshot.get("futures_positions") or [])
