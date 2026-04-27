@@ -42,6 +42,20 @@ class TestMockTradingPlatform:
         assert "FUTURES_USD" in balance
         assert isinstance(balance["FUTURES_USD"], float)
 
+    def test_default_initialization_is_futures_only(self):
+        """Default mock balances should not invent spot holdings."""
+        platform = MockTradingPlatform()
+
+        balance = platform.get_balance()
+        assert balance["FUTURES_USD"] == 10000.0
+        assert "SPOT_USD" not in balance
+        assert "SPOT_USDC" not in balance
+
+        portfolio = platform.get_portfolio_breakdown()
+        assert portfolio["spot_value_usd"] == 0.0
+        assert portfolio["holdings"] == []
+        assert portfolio["total_value_usd"] == 10000.0
+
     def test_buy_trade_execution(self, platform):
         """Test successful BUY trade execution."""
         decision = {

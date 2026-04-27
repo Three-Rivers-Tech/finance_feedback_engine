@@ -38,7 +38,7 @@ class MockTradingPlatform(BaseTradingPlatform):
         Args:
             credentials: Optional credentials dict (unused, for compatibility)
             initial_balance: Starting balances, e.g.:
-                {'FUTURES_USD': 10000.0, 'SPOT_USD': 5000.0, 'SPOT_USDC': 3000.0}
+                {'FUTURES_USD': 10000.0}
             slippage_config: Slippage settings:
                 - 'type': 'percentage' or 'fixed'
                 - 'rate': slippage rate (default 0.001 = 0.1%)
@@ -51,10 +51,7 @@ class MockTradingPlatform(BaseTradingPlatform):
 
         # Initialize balances
         self._balance = initial_balance or {
-            "USD": 5000.0,
             "FUTURES_USD": 10000.0,
-            "SPOT_USD": 5000.0,
-            "SPOT_USDC": 3000.0,
         }
 
         # Initialize positions tracking

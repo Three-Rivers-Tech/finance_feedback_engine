@@ -75,16 +75,12 @@ class UnifiedTradingPlatform(BaseTradingPlatform):
                     cash_val = paper_creds.get("initial_cash_usd") or paper_creds.get("cash")
                     if isinstance(cash_val, (int, float)):
                         initial_balance = {
-                            "FUTURES_USD": round(float(cash_val) * 0.6, 2),
-                            "SPOT_USD": round(float(cash_val) * 0.3, 2),
-                            "SPOT_USDC": round(float(cash_val) * 0.1, 2),
+                            "FUTURES_USD": round(float(cash_val), 2),
                         }
-                # If no balance provided at all, seed with 10k split
+                # If no balance provided at all, seed a futures-only 10k paper account
                 if initial_balance is None:
                     initial_balance = {
-                        "FUTURES_USD": 6000.0,
-                        "SPOT_USD": 3000.0,
-                        "SPOT_USDC": 1000.0,
+                        "FUTURES_USD": 10000.0,
                     }
             else:
                 initial_balance = {

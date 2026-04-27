@@ -67,7 +67,7 @@ class TestUnifiedPlatformRouting:
         """Create mock paper platform."""
         platform = Mock()
         platform.__class__.__name__ = "MockTradingPlatform"
-        platform.get_balance.return_value = {"FUTURES_USD": 250000.0, "SPOT_USD": 50000.0}
+        platform.get_balance.return_value = {"FUTURES_USD": 250000.0}
         platform.execute_trade.return_value = {
             "success": True,
             "decision_id": "test-paper",
@@ -75,10 +75,10 @@ class TestUnifiedPlatformRouting:
         }
         platform.get_account_info.return_value = {"status": "active", "mode": "mock"}
         platform.get_portfolio_breakdown.return_value = {
-            "total_value_usd": 300000.0,
+            "total_value_usd": 250000.0,
             "futures_value_usd": 250000.0,
-            "spot_value_usd": 50000.0,
-            "num_assets": 2,
+            "spot_value_usd": 0.0,
+            "num_assets": 0,
             "holdings": [],
             "unrealized_pnl": 1200.0,
             "futures_summary": {
@@ -388,7 +388,7 @@ class TestUnifiedPlatformRouting:
         account_info = unified.get_account_info()
         positions = unified.get_active_positions()
 
-        assert balance == {"paper_FUTURES_USD": 250000.0, "paper_SPOT_USD": 50000.0}
+        assert balance == {"paper_FUTURES_USD": 250000.0}
         assert set(portfolio["platform_breakdowns"].keys()) == {"paper"}
         assert portfolio["active_execution_platform"] == "paper"
         assert account_info == {"paper": {"status": "active", "mode": "mock"}}
