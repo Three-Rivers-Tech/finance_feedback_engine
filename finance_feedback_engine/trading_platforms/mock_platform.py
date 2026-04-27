@@ -3,7 +3,7 @@
 import logging
 import time
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Any, Dict, Optional
 
 from finance_feedback_engine.decision_engine.policy_actions import get_legacy_action_compatibility, get_policy_action_family, is_policy_action
@@ -567,6 +567,34 @@ class MockTradingPlatform(BaseTradingPlatform):
                 "timestamp": decision.get("timestamp", datetime.now(UTC).isoformat()),
             }
 
+    def _get_daily_realized_pnl(self, as_of: Optional[date] = None) -> float:
+        """Sum realized P&L from mock trade history for the given UTC date."""
+        target_date = as_of or datetime.now(UTC).date()
+        total = 0.0
+
+        for trade in self._trade_history:
+            try:
+                realized = float(trade.get("realized_pnl") or 0.0)
+            except (TypeError, ValueError):
+                continue
+
+            timestamp = trade.get("timestamp")
+            trade_date = None
+            if timestamp:
+                try:
+                    normalized = str(timestamp).replace("Z", "+00:00")
+                    trade_date = datetime.fromisoformat(normalized).astimezone(UTC).date()
+                except (TypeError, ValueError):
+                    trade_date = None
+
+            if trade_date is None:
+                trade_date = target_date
+
+            if trade_date == target_date:
+                total += realized
+
+        return total
+
     def get_portfolio_breakdown(self) -> Dict[str, Any]:
         """
         Get detailed portfolio breakdown matching Coinbase format.
@@ -691,11 +719,12 @@ class MockTradingPlatform(BaseTradingPlatform):
         # Futures summary
         buying_power = futures_balance * 2  # Mock 2x buying power
         initial_margin = total_notional / 10  # Mock 10x leverage
+        daily_realized_pnl = self._get_daily_realized_pnl()
 
         futures_summary = {
             "total_balance_usd": futures_balance,
             "unrealized_pnl": total_unrealized_pnl,
-            "daily_realized_pnl": 0.0,  # Mock
+            "daily_realized_pnl": daily_realized_pnl,
             "buying_power": buying_power,
             "initial_margin": initial_margin,
         }
@@ -718,6 +747,7 @@ class MockTradingPlatform(BaseTradingPlatform):
             "spot_value_usd": spot_value,
             "num_assets": len(holdings),
             "unrealized_pnl": total_unrealized_pnl,
+            "daily_realized_pnl": daily_realized_pnl,
             "platform": "mock",
         }
 

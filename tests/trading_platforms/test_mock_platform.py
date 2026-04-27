@@ -216,6 +216,37 @@ class TestMockTradingPlatform:
         assert "entry_price" in position
         assert "unrealized_pnl" in position
 
+    def test_portfolio_breakdown_reports_realized_pnl_from_trade_history(self, platform):
+        buy_decision = {
+            "id": "test-realized-buy",
+            "action": "BUY",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 1000.0,
+            "entry_price": 50000.0,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        buy_result = platform.execute_trade(buy_decision)
+        assert buy_result["success"] is True
+
+        sell_decision = {
+            "id": "test-realized-sell",
+            "action": "SELL",
+            "asset_pair": "BTC-USD",
+            "suggested_amount": 1000.0,
+            "entry_price": 51000.0,
+            "timestamp": datetime.now(UTC).isoformat(),
+        }
+        sell_result = platform.execute_trade(sell_decision)
+        assert sell_result["success"] is True
+
+        breakdown = platform.get_portfolio_breakdown()
+        realized = breakdown["futures_summary"]["daily_realized_pnl"]
+
+        assert realized > 0
+        assert breakdown["daily_realized_pnl"] == pytest.approx(realized)
+        assert platform.get_account_info()["portfolio"]["futures_summary"]["daily_realized_pnl"] == pytest.approx(realized)
+
+
     def test_active_positions_expose_contract_size_metadata(self, platform):
         decision = {
             "id": "test-contract-size",

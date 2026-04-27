@@ -1,6 +1,7 @@
 """Mock portfolio retriever for testing."""
 
 import logging
+from datetime import UTC, datetime
 from typing import Any, Dict, List
 
 from .base_platform import PositionInfo
@@ -151,6 +152,45 @@ class MockPortfolioRetriever(AbstractPortfolioRetriever):
             logger.warning(f"Error parsing mock holdings: {e}")
             return []
 
+    def _get_daily_realized_pnl(self) -> float:
+        """Sum realized P&L from the mock client trade history for today (UTC)."""
+        if not self.client:
+            return 0.0
+
+        target_date = datetime.now(UTC).date()
+        history = []
+        if hasattr(self.client, "get_trade_history"):
+            try:
+                history = self.client.get_trade_history() or []
+            except Exception:
+                history = []
+        elif hasattr(self.client, "_trade_history"):
+            history = list(getattr(self.client, "_trade_history", []) or [])
+
+        total = 0.0
+        for trade in history:
+            try:
+                realized = float(trade.get("realized_pnl") or 0.0)
+            except (TypeError, ValueError):
+                continue
+
+            timestamp = trade.get("timestamp")
+            trade_date = None
+            if timestamp:
+                try:
+                    normalized = str(timestamp).replace("Z", "+00:00")
+                    trade_date = datetime.fromisoformat(normalized).astimezone(UTC).date()
+                except (TypeError, ValueError):
+                    trade_date = None
+
+            if trade_date is None:
+                trade_date = target_date
+
+            if trade_date == target_date:
+                total += realized
+
+        return total
+
     def assemble_result(
         self,
         account_info: Dict[str, Any],
@@ -187,11 +227,12 @@ class MockPortfolioRetriever(AbstractPortfolioRetriever):
             # Mock futures summary
             buying_power = futures_balance * 2  # Mock 2x buying power
             initial_margin = total_notional / 10 if total_notional > 0 else 0  # Mock 10x leverage
+            daily_realized_pnl = self._get_daily_realized_pnl()
 
             futures_summary = {
                 "total_balance_usd": futures_balance,
                 "unrealized_pnl": total_unrealized_pnl,
-                "daily_realized_pnl": 0.0,  # Mock
+                "daily_realized_pnl": daily_realized_pnl,
                 "buying_power": buying_power,
                 "initial_margin": initial_margin,
             }
@@ -213,6 +254,7 @@ class MockPortfolioRetriever(AbstractPortfolioRetriever):
                 "spot_value_usd": spot_value,
                 "num_assets": len(holdings),
                 "unrealized_pnl": total_unrealized_pnl,
+                "daily_realized_pnl": daily_realized_pnl,
                 "platform": "mock",
             }
 
