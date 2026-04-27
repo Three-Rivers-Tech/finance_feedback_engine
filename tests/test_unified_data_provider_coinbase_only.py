@@ -10,3 +10,21 @@ def test_unified_data_provider_respects_coinbase_only_enabled_platforms():
     )
     assert provider.coinbase is not None
     assert provider.oanda is None
+
+
+def test_unified_data_provider_keeps_coinbase_market_data_in_paper_only_mode():
+    provider = UnifiedDataProvider(
+        alpha_vantage_api_key='test',
+        coinbase_credentials={'api_key': 'real', 'api_secret': 'real'},
+        config={'trading_platform': 'unified', 'enabled_platforms': ['paper']},
+    )
+    assert provider.coinbase is not None
+
+
+def test_unified_data_provider_allows_public_coinbase_data_without_credentials():
+    provider = UnifiedDataProvider(
+        alpha_vantage_api_key='test',
+        coinbase_credentials=None,
+        config={'trading_platform': 'unified'},
+    )
+    assert provider.coinbase is not None

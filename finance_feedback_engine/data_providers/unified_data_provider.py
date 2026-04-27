@@ -63,7 +63,8 @@ class UnifiedDataProvider:
 
         enabled_platforms = {str(name).lower() for name in (self.config.get("enabled_platforms") or [])}
         platform_mode = str(self.config.get("trading_platform") or "unified").lower()
-        if enabled_platforms:
+        paper_only_runtime = enabled_platforms == {"paper"}
+        if enabled_platforms and not paper_only_runtime:
             allow_coinbase = "coinbase_advanced" in enabled_platforms or "coinbase" in enabled_platforms
             allow_oanda = "oanda" in enabled_platforms
         else:
@@ -81,7 +82,7 @@ class UnifiedDataProvider:
             except Exception as e:
                 logger.warning(f"Failed to initialize Alpha Vantage: {e}")
 
-        if allow_coinbase and coinbase_credentials:
+        if allow_coinbase:
             try:
                 self.coinbase = CoinbaseDataProvider(
                     credentials=coinbase_credentials, rate_limiter=self.rate_limiter
