@@ -147,3 +147,71 @@ def test_monitoring_context_includes_portfolio_breakdown_for_risk_gate_boundary(
     assert context["portfolio_breakdown"]["platform_breakdowns"]["coinbase"]["futures_summary"]["initial_margin"] == 76.34
     assert context["portfolio_breakdown"]["platform_breakdowns"]["coinbase"]["futures_summary"]["total_balance_usd"] == 267.10
 
+
+
+def test_risk_metrics_use_active_paper_breakdown_when_total_value_missing():
+    provider = MonitoringContextProvider(_DummyPlatform())
+    portfolio = {
+        "total_value_usd": 0.0,
+        "active_execution_platform": "paper",
+        "platform_breakdowns": {
+            "paper": {
+                "futures_summary": {
+                    "total_balance_usd": 250000.0,
+                    "unrealized_pnl": 125.0,
+                },
+                "futures_positions": [
+                    {
+                        "product_id": "BIP-20DEC30-CDE",
+                        "side": "LONG",
+                        "contracts": 1,
+                        "current_price": 78000.0,
+                    }
+                ],
+            }
+        },
+    }
+
+    metrics = provider._calculate_risk_metrics(
+        portfolio["platform_breakdowns"]["paper"]["futures_positions"], portfolio
+    )
+
+    assert metrics["account_value"] == 250000.0
+    assert metrics["unrealized_pnl"] == 125.0
+    assert metrics["leverage_estimate"] > 0
+
+
+def test_monitoring_context_preserves_active_paper_breakdown_metadata():
+    provider = MonitoringContextProvider(_DummyPlatform())
+    portfolio = {
+        "total_value_usd": 0.0,
+        "active_execution_platform": "paper",
+        "active_platform_breakdown": {
+            "futures_summary": {
+                "total_balance_usd": 250000.0,
+                "unrealized_pnl": 0.0,
+                "buying_power": 500000.0,
+                "initial_margin": 0.0,
+            },
+            "futures_positions": [],
+            "total_value_usd": 250000.0,
+        },
+        "platform_breakdowns": {
+            "paper": {
+                "futures_summary": {
+                    "total_balance_usd": 250000.0,
+                    "unrealized_pnl": 0.0,
+                    "buying_power": 500000.0,
+                    "initial_margin": 0.0,
+                },
+                "futures_positions": [],
+                "total_value_usd": 250000.0,
+            }
+        },
+    }
+
+    provider.platform.get_portfolio_breakdown = lambda: portfolio
+    context = provider.get_monitoring_context(asset_pair="BTCUSD")
+
+    assert context["risk_metrics"]["account_value"] == 250000.0
+    assert context["portfolio_breakdown"]["active_execution_platform"] == "paper"

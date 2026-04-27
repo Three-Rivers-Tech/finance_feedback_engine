@@ -401,6 +401,26 @@ class MonitoringContextProvider:
         """Extract active futures/spot positions from either flat or platform_breakdowns shapes."""
         return extract_portfolio_positions(portfolio)
 
+    def _get_active_portfolio_breakdown(
+        self, portfolio: Dict[str, Any]
+    ) -> tuple[Dict[str, Any], Dict[str, Any]]:
+        """Resolve the active execution breakdown/futures summary from portfolio metadata."""
+        platform_breakdowns = portfolio.get("platform_breakdowns") or {}
+        if not isinstance(platform_breakdowns, dict) or not platform_breakdowns:
+            return {}, {}
+
+        active_name = str(portfolio.get("active_execution_platform") or "").lower()
+        active_breakdown = {}
+        if active_name:
+            active_breakdown = platform_breakdowns.get(active_name) or {}
+        if not active_breakdown:
+            active_breakdown = portfolio.get("active_platform_breakdown") or {}
+        if not active_breakdown and platform_breakdowns:
+            _, active_breakdown = next(iter(platform_breakdowns.items()))
+
+        active_breakdown = active_breakdown or {}
+        return active_breakdown, (active_breakdown.get("futures_summary") or {})
+
     def _filter_positions_by_asset(
         self, positions: List[Dict[str, Any]], asset_pair: str
     ) -> List[Dict[str, Any]]:
@@ -457,21 +477,19 @@ class MonitoringContextProvider:
         total_value = _coerce_monitoring_float(portfolio.get("total_value_usd", 0), 0.0)
         summary_unrealized = None
         if total_value <= 0:
-            for name, pdata in (portfolio.get("platform_breakdowns") or {}).items():
-                if not isinstance(pdata, dict):
-                    continue
-                if str(name).lower() == "coinbase":
-                    futures_summary = pdata.get("futures_summary") or {}
-                    total_value = _coerce_monitoring_float(
-                        futures_summary.get("total_balance_usd", 0)
-                        or pdata.get("total_value_usd", 0),
-                        0.0,
-                    )
-                    if futures_summary.get("unrealized_pnl") is not None:
-                        summary_unrealized = _coerce_monitoring_float(
-                            futures_summary.get("unrealized_pnl"), 0.0
-                        )
-                    break
+            active_breakdown, futures_summary = self._get_active_portfolio_breakdown(
+                portfolio
+            )
+            total_value = _coerce_monitoring_float(
+                futures_summary.get("total_balance_usd", 0)
+                or active_breakdown.get("total_value_usd", 0)
+                or portfolio.get("total_balance_usd", 0),
+                0.0,
+            )
+            if futures_summary.get("unrealized_pnl") is not None:
+                summary_unrealized = _coerce_monitoring_float(
+                    futures_summary.get("unrealized_pnl"), 0.0
+                )
         if summary_unrealized is not None:
             unrealized_pnl = summary_unrealized
         leverage = total_exposure / total_value if total_value > 0 else 0
