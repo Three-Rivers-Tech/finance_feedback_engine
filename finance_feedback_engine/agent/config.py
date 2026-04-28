@@ -358,3 +358,7 @@ class TradingAgentConfig(BaseModel):
     # --- Resilience & Observability ---
     max_retries_per_cycle: int = 3
     dashboard_event_queue_size: int = 0  # 0 = auto-size by environment
+    dashboard_event_ttl_seconds: float = 600.0
+    dashboard_state_transition_ttl_seconds: float = 60.0
+    dashboard_signal_failure_ttl_seconds: float = 300.0
+    dashboard_decision_event_ttl_seconds: float = 900.0

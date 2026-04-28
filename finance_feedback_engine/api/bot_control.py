@@ -958,6 +958,8 @@ async def _build_stream_payload(
         _agent_instance, "_dashboard_event_queue"
     ):
         try:
+            if hasattr(_agent_instance, "_compact_dashboard_event_queue"):
+                _agent_instance._compact_dashboard_event_queue()
             queue_obj = _agent_instance._dashboard_event_queue
             latest_queue_item: Optional[Dict[str, Any]] = None
             drained = 0

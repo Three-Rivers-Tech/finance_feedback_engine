@@ -1,6 +1,7 @@
 # finance_feedback_engine/agent/trading_loop_agent.py
 
 import asyncio
+import collections
 import datetime
 import logging
 import queue
@@ -67,6 +68,18 @@ from finance_feedback_engine.utils.product_id import product_id_to_asset_pair as
 logger = logging.getLogger(__name__)
 tracer = trace.get_tracer(__name__)
 meter = metrics.get_meter(__name__)
+
+DEFAULT_DASHBOARD_EVENT_TTL_SECONDS = 600.0
+DASHBOARD_EVENT_TTL_SECONDS = {
+    "state_transition": 60.0,
+    "signal_delivery_failure": 300.0,
+    "decision_approved": 900.0,
+    "decision_rejected": 900.0,
+}
+COALESCIBLE_DASHBOARD_EVENT_TYPES = {
+    "state_transition",
+    "signal_delivery_failure",
+}
 
 
 def _derive_execution_intent(
@@ -395,6 +408,38 @@ class TradingLoopAgent:
                 resolved_queue_size = 50
 
         self._dashboard_event_queue = queue.Queue(maxsize=resolved_queue_size)
+        self._dashboard_event_default_ttl_seconds = float(
+            getattr(
+                self.config,
+                "dashboard_event_ttl_seconds",
+                DEFAULT_DASHBOARD_EVENT_TTL_SECONDS,
+            )
+        )
+        decision_ttl = float(
+            getattr(
+                self.config,
+                "dashboard_decision_event_ttl_seconds",
+                DASHBOARD_EVENT_TTL_SECONDS["decision_approved"],
+            )
+        )
+        self._dashboard_event_ttl_seconds = {
+            "state_transition": float(
+                getattr(
+                    self.config,
+                    "dashboard_state_transition_ttl_seconds",
+                    DASHBOARD_EVENT_TTL_SECONDS["state_transition"],
+                )
+            ),
+            "signal_delivery_failure": float(
+                getattr(
+                    self.config,
+                    "dashboard_signal_failure_ttl_seconds",
+                    DASHBOARD_EVENT_TTL_SECONDS["signal_delivery_failure"],
+                )
+            ),
+            "decision_approved": decision_ttl,
+            "decision_rejected": decision_ttl,
+        }
         self._cycle_count = 0
         self._start_time = None  # Will be set in run()
         self._current_cycle_id: str | None = None
@@ -870,24 +915,20 @@ class TradingLoopAgent:
         if hasattr(self, "_dashboard_event_queue"):
             queue_name = "dashboard"
             q = self._dashboard_event_queue
+            event = dict(event)
+            event.setdefault("timestamp", time.time())
+            self._compact_dashboard_event_queue(now=event["timestamp"])
             try:
                 q.put_nowait(event)
             except queue.Full:
-                # Production: drop oldest to preserve most recent events; Dev: drop newest
+                self._compact_dashboard_event_queue(now=event["timestamp"])
                 try:
-                    if is_production():
-                        # Drop oldest and attempt to enqueue new event
-                        q.get_nowait()
-                        increment_dashboard_events_dropped(queue_name)
-                        q.put_nowait(event)
-                    else:
-                        increment_dashboard_events_dropped(queue_name)
-                        # TODO(stage7-followup): Inspect the dashboard event consumer/drain path.
-                        # The queue has remained saturated in live operation even when FFE health is otherwise healthy,
-                        # so we likely need better drain behavior, backpressure, or queue sizing visibility.
-                        logger.warning(
-                            f"Dashboard event queue is full ({q.qsize()} events), dropping newest event."
-                        )
+                    q.get_nowait()
+                    increment_dashboard_events_dropped(queue_name)
+                    q.put_nowait(event)
+                    logger.warning(
+                        "Dashboard event queue remained full after GC; dropped oldest event."
+                    )
                 except Exception as inner_exc:  # noqa: BLE001
                     increment_dashboard_events_dropped(queue_name)
                     logger.warning(f"Failed to enqueue dashboard event: {inner_exc}")
@@ -901,6 +942,71 @@ class TradingLoopAgent:
                     logger.debug(
                         "Unable to update dashboard queue metrics", exc_info=True
                     )
+
+    def _dashboard_event_ttl(self, event_type: Optional[str]) -> float:
+        if not event_type:
+            return self._dashboard_event_default_ttl_seconds
+        return self._dashboard_event_ttl_seconds.get(
+            event_type, self._dashboard_event_default_ttl_seconds
+        )
+
+    def _dashboard_event_gc_key(
+        self, event: Dict[str, Any]
+    ) -> Optional[tuple[str, Optional[str]]]:
+        event_type = event.get("type")
+        if event_type not in COALESCIBLE_DASHBOARD_EVENT_TYPES:
+            return None
+        if event_type == "state_transition":
+            return (event_type, event.get("to"))
+        return (event_type, None)
+
+    def _compact_dashboard_events(
+        self, events: List[Dict[str, Any]], now: Optional[float] = None
+    ) -> List[Dict[str, Any]]:
+        now = time.time() if now is None else float(now)
+        retained_reversed: List[Dict[str, Any]] = []
+        seen_keys = set()
+
+        for raw_event in reversed(events):
+            if not isinstance(raw_event, dict):
+                continue
+
+            event = dict(raw_event)
+            try:
+                event_ts = float(event.get("timestamp", now))
+            except (TypeError, ValueError):
+                event_ts = now
+            event["timestamp"] = event_ts
+
+            if now - event_ts > self._dashboard_event_ttl(event.get("type")):
+                continue
+
+            gc_key = self._dashboard_event_gc_key(event)
+            if gc_key is not None and gc_key in seen_keys:
+                continue
+            if gc_key is not None:
+                seen_keys.add(gc_key)
+
+            retained_reversed.append(event)
+
+        retained_reversed.reverse()
+        return retained_reversed
+
+    def _compact_dashboard_event_queue(self, now: Optional[float] = None) -> None:
+        if not hasattr(self, "_dashboard_event_queue"):
+            return
+
+        q = self._dashboard_event_queue
+        with q.mutex:
+            original_events = list(q.queue)
+            compacted_events = self._compact_dashboard_events(original_events, now=now)
+            removed = len(original_events) - len(compacted_events)
+            if removed <= 0:
+                return
+
+            q.queue = collections.deque(compacted_events)
+            if hasattr(q, "unfinished_tasks"):
+                q.unfinished_tasks = max(0, q.unfinished_tasks - removed)
 
     def _ensure_cycle_budget(self) -> None:
         """Initialize cycle id and retry budget if not already set."""

@@ -395,6 +395,8 @@ class DashboardDataAggregator:
 
             # Check if agent has event queue
             if hasattr(self.agent, "_dashboard_event_queue"):
+                if hasattr(self.agent, "_compact_dashboard_event_queue"):
+                    self.agent._compact_dashboard_event_queue()
                 queue = self.agent._dashboard_event_queue
 
                 # Drain queue into list (non-blocking)
