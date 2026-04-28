@@ -1165,6 +1165,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
         prompt: str,
         system_prompt: Optional[str] = None,
         response_format: Optional[str] = "json",
+        request_options: Optional[Dict[str, Any]] = None,
     ) -> str:
         """Helper to query a single provider in raw mode without decision parsing."""
         from .provider_tiers import is_ollama_model
@@ -1175,6 +1176,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
                 model_name=provider_name,
                 system_prompt=system_prompt,
                 response_format=response_format,
+                request_options=request_options,
             )
 
         if provider_name == "local":
@@ -1182,6 +1184,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
                 prompt,
                 system_prompt=system_prompt,
                 response_format=response_format,
+                request_options=request_options,
             )
 
         raise ValueError(
@@ -1305,6 +1308,7 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
         model_name: Optional[str] = None,
         system_prompt: Optional[str] = None,
         response_format: Optional[str] = "json",
+        request_options: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Local raw AI inference using Ollama without the trading-decision wrapper.
@@ -1329,6 +1333,8 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
                 model_name,
                 system_prompt,
                 response_format,
+                None,
+                request_options,
             )
         except ImportError as e:
             logger.error(

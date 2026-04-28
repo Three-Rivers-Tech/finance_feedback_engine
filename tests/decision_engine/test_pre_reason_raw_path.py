@@ -10,13 +10,14 @@ def test_ai_decision_manager_can_route_single_provider_raw_to_local():
 
     calls = []
 
-    async def fake_local_raw(prompt, model_name=None, system_prompt=None, response_format="json"):
+    async def fake_local_raw(prompt, model_name=None, system_prompt=None, response_format="json", request_options=None):
         calls.append(
             {
                 "prompt": prompt,
                 "model_name": model_name,
                 "system_prompt": system_prompt,
                 "response_format": response_format,
+                "request_options": request_options,
             }
         )
         return '{"regime":"dead","actionable":false}'
@@ -38,6 +39,7 @@ def test_ai_decision_manager_can_route_single_provider_raw_to_local():
             "model_name": None,
             "system_prompt": "Return only JSON.",
             "response_format": "json",
+            "request_options": None,
         }
     ]
 
@@ -72,13 +74,14 @@ def test_generate_decision_uses_raw_pre_reason_query_and_can_skip():
     raw_calls = []
     legacy_calls = []
 
-    async def fake_raw(provider_name, prompt, system_prompt=None, response_format="json"):
+    async def fake_raw(provider_name, prompt, system_prompt=None, response_format="json", request_options=None):
         raw_calls.append(
             {
                 "provider_name": provider_name,
                 "prompt": prompt,
                 "system_prompt": system_prompt,
                 "response_format": response_format,
+                "request_options": request_options,
             }
         )
         return (
@@ -122,6 +125,7 @@ def test_generate_decision_uses_raw_pre_reason_query_and_can_skip():
 
     assert raw_calls, "expected pre-reason to use raw single-provider path"
     assert legacy_calls == []
+    assert raw_calls[0]["request_options"] == {"temperature": 0.2, "num_predict": 160}
     assert decision["action"] == "HOLD"
     assert decision["pre_reason_skipped"] is True
     assert decision["market_brief"]["regime"] == "dead"

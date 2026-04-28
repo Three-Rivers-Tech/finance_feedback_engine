@@ -598,6 +598,7 @@ class LocalLLMProvider:
         system_prompt: Optional[str] = None,
         response_format: Optional[str] = "json",
         request_timeout_s: Optional[float] = None,
+        request_options: Optional[Dict[str, Any]] = None,
     ) -> str:
         """
         Query local LLM without injecting the trading advisor wrapper.
@@ -652,6 +653,8 @@ class LocalLLMProvider:
                         "top_p": 0.9,
                     },
                 }
+                if request_options:
+                    request_kwargs["options"].update(request_options)
                 if response_format:
                     request_kwargs["format"] = response_format
 

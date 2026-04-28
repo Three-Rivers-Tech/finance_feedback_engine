@@ -2310,7 +2310,9 @@ Missing Evidence: <what additional evidence would increase confidence>
                 # schema is not contaminated by the trading-decision wrapper.
                 _timing_started = time.perf_counter()
                 pre_reason_raw_response = await self.ai_manager._query_single_provider_raw(
-                    "deepseek-r1:8b", pre_reason_prompt,
+                    "deepseek-r1:8b",
+                    pre_reason_prompt,
+                    request_options={"temperature": 0.2, "num_predict": 160},
                 )
                 reasoning_timing["pre_reason_raw_call_s"] = round(time.perf_counter() - _timing_started, 4)
                 logger.debug(
