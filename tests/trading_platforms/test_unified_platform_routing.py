@@ -40,6 +40,31 @@ class TestUnifiedPlatformRouting:
         return platform
 
     @pytest.fixture
+    def mock_paper(self):
+        """Create mock paper platform."""
+        platform = Mock()
+        platform.__class__.__name__ = "MockTradingPlatform"
+        platform.get_balance.return_value = {"FUTURES_USD": 250000.0}
+        platform.execute_trade.return_value = {
+            "success": True,
+            "decision_id": "test-paper-001",
+        }
+        platform.get_account_info.return_value = {"status": "active", "mode": "mock"}
+        platform.get_active_positions.return_value = {"positions": []}
+        platform.get_portfolio_breakdown.return_value = {
+            "total_value_usd": 250000.0,
+            "cash_balance_usd": 250000.0,
+            "num_assets": 0,
+            "holdings": [],
+            "futures_summary": {
+                "total_balance_usd": 250000.0,
+                "buying_power": 250000.0,
+                "initial_margin": 0.0,
+            },
+        }
+        return platform
+
+    @pytest.fixture
     def unified_platform(self, mock_coinbase, mock_oanda, monkeypatch):
         """Create UnifiedTradingPlatform with mocked sub-platforms."""
         # Mock the platform classes
@@ -232,3 +257,91 @@ class TestUnifiedPlatformRouting:
         assert any(c["asset_pair"] == "BTCUSD" for c in coinbase_calls)
         assert any(c["asset_pair"] == "ETHUSD" for c in coinbase_calls)
         assert any(c["asset_pair"] == "EURUSD" for c in oanda_calls)
+
+    def test_paper_mode_routes_trades_to_paper(self, mock_coinbase, mock_paper, monkeypatch):
+        monkeypatch.setattr(
+            "finance_feedback_engine.trading_platforms.unified_platform.CoinbaseAdvancedPlatform",
+            lambda x: mock_coinbase,
+        )
+        monkeypatch.setattr(
+            "finance_feedback_engine.trading_platforms.unified_platform.MockTradingPlatform",
+            lambda creds, initial_balance=None: mock_paper,
+        )
+
+        unified = UnifiedTradingPlatform(
+            {
+                "coinbase": {"api_key": "test", "api_secret": "test"},
+                "paper": {"initial_cash_usd": 250000.0},
+            },
+            config={"paper_trading_defaults": {"enabled": True}},
+        )
+        unified.platforms["coinbase"] = mock_coinbase
+        unified.platforms["paper"] = mock_paper
+
+        decision = {
+            "id": "test-btcusd-paper",
+            "action": "BUY",
+            "asset_pair": "BTCUSD",
+            "suggested_amount": 5000.0,
+            "entry_price": 50000.0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+
+        result = unified.execute_trade(decision)
+
+        mock_paper.execute_trade.assert_called_once_with(decision)
+        mock_coinbase.execute_trade.assert_not_called()
+        assert result["success"] is True
+
+    def test_paper_mode_hides_inactive_platform_telemetry(self, mock_coinbase, mock_paper, monkeypatch):
+        monkeypatch.setattr(
+            "finance_feedback_engine.trading_platforms.unified_platform.CoinbaseAdvancedPlatform",
+            lambda x: mock_coinbase,
+        )
+        monkeypatch.setattr(
+            "finance_feedback_engine.trading_platforms.unified_platform.MockTradingPlatform",
+            lambda creds, initial_balance=None: mock_paper,
+        )
+
+        unified = UnifiedTradingPlatform(
+            {
+                "coinbase": {"api_key": "test", "api_secret": "test"},
+                "paper": {"initial_cash_usd": 250000.0},
+            },
+            config={"paper_trading_defaults": {"enabled": True}},
+        )
+        unified.platforms["coinbase"] = mock_coinbase
+        unified.platforms["paper"] = mock_paper
+
+        balance = unified.get_balance()
+        portfolio = unified.get_portfolio_breakdown()
+        account_info = unified.get_account_info()
+        positions = unified.get_active_positions()
+
+        assert balance == {"paper_FUTURES_USD": 250000.0}
+        assert set(portfolio["platform_breakdowns"].keys()) == {"paper"}
+        assert portfolio["active_execution_platform"] == "paper"
+        assert account_info == {"paper": {"status": "active", "mode": "mock"}}
+        assert positions == {"positions": []}
+        mock_coinbase.get_balance.assert_not_called()
+        mock_coinbase.get_portfolio_breakdown.assert_not_called()
+        mock_coinbase.get_account_info.assert_not_called()
+        mock_coinbase.get_active_positions.assert_not_called()
+
+    def test_enabled_platforms_paper_only_implies_paper_execution_without_defaults(
+        self, mock_paper, monkeypatch
+    ):
+        monkeypatch.setattr(
+            "finance_feedback_engine.trading_platforms.unified_platform.MockTradingPlatform",
+            lambda *args, **kwargs: mock_paper,
+        )
+
+        unified = UnifiedTradingPlatform(
+            credentials={"paper": {"initial_balance": {"FUTURES_USD": 250000.0}}},
+            config={"enabled_platforms": ["paper"]},
+        )
+        unified.platforms["paper"] = mock_paper
+
+        assert unified._paper_execution_enabled is True
+        assert unified._resolve_target_platform_name("crypto") == "paper"
+        assert unified._resolve_active_execution_platform_name() == "paper"

@@ -9,6 +9,10 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
 import pandas as pd
 
+from .config.provider_credentials import (
+    resolve_provider_credentials,
+    resolve_runtime_contract,
+)
 from .data_providers.alpha_vantage_provider import AlphaVantageProvider
 from .data_providers.historical_data_provider import HistoricalDataProvider
 from .decision_engine.engine import DecisionEngine
@@ -94,6 +98,7 @@ class FinanceFeedbackEngine:
 
         # Initialize trading platform
         platform_name = config.get("trading_platform", "coinbase")
+        runtime_contract = resolve_runtime_contract(config)
 
         # Initialize Delta Lake integration (if enabled)
         delta_lake_config = config.get("delta_lake", {})
@@ -117,74 +122,42 @@ class FinanceFeedbackEngine:
 
         # Handle unified/multi-platform mode
         if platform_name.lower() == "unified":
-            # Convert platforms list to unified credentials format
             platforms_list = config.get("platforms", [])
-            if not platforms_list:
-                raise ValueError(
-                    "Unified platform mode requires 'platforms' list in config. "
-                    "Example:\n"
-                    "platforms:\n"
-                    "  - name: coinbase_advanced\n"
-                    "    credentials: {...}\n"
-                    "  - name: oanda\n"
-                    "    credentials: {...}"
+            provider_credentials = resolve_provider_credentials(config)
+            platform_credentials = {}
+
+            if provider_credentials.coinbase:
+                platform_credentials["coinbase"] = provider_credentials.coinbase
+            if provider_credentials.oanda:
+                platform_credentials["oanda"] = provider_credentials.oanda
+
+            paper_initial_cash = (
+                (config.get("paper_trading_defaults") or {}).get(
+                    "initial_cash_usd", 10000.0
                 )
+            )
+            try:
+                paper_initial_cash = float(paper_initial_cash)
+            except (TypeError, ValueError):
+                paper_initial_cash = 10000.0
 
-            # Transform platforms list into nested dict format
-            unified_credentials = {}
-            for platform_config in platforms_list:
-                # Validate platform config structure
-                if not isinstance(platform_config, dict):
-                    logger.warning(
-                        f"Skipping invalid platform config (not a dict): "
-                        f"{platform_config}"
-                    )
-                    continue
+            paper_credentials = dict(provider_credentials.paper or {})
+            if runtime_contract.paper_execution_enabled or paper_credentials:
+                paper_credentials.setdefault(
+                    "initial_balance",
+                    {"FUTURES_USD": round(paper_initial_cash, 2)},
+                )
+                platform_credentials["paper"] = paper_credentials
 
-                platform_key = platform_config.get("name", "").lower()
-                platform_creds = platform_config.get("credentials", {})
-
-                # Validate name is non-empty string
-                if not platform_key or not isinstance(platform_key, str):
-                    logger.warning(
-                        f"Skipping platform config with invalid/missing "
-                        f"'name': {platform_config}"
-                    )
-                    continue
-
-                # Validate credentials is a dict
-                if not isinstance(platform_creds, dict):
-                    logger.warning(
-                        f"Skipping platform '{platform_key}' with invalid "
-                        f"'credentials' (expected dict, got "
-                        f"{type(platform_creds).__name__})"
-                    )
-                    continue
-
-                # Normalize key names (coinbase_advanced -> coinbase)
-                if platform_key in ["coinbase", "coinbase_advanced"]:
-                    unified_credentials["coinbase"] = platform_creds
-                elif platform_key == "oanda":
-                    unified_credentials["oanda"] = platform_creds
-                else:
-                    logger.warning(
-                        f"Unknown platform in unified config: {platform_key}"
-                    )
-
-            # Ensure we have at least one valid platform configured
-            if not unified_credentials:
+            if not platform_credentials:
                 logger.error(
                     "No valid platforms configured in 'platforms' list. "
-                    "Each platform must have 'name' (string) and "
-                    "'credentials' (dict). "
+                    "Each platform must have 'name' (string) and credentials' (dict). "
                     f"Received: {platforms_list}"
                 )
                 raise ValueError(
-                    "Unified platform mode requires at least one valid "
-                    "platform with 'name' and 'credentials'"
+                    "Unified platform mode requires at least one valid platform with 'name' and 'credentials'"
                 )
-
-            platform_credentials = unified_credentials
         else:
             # Single platform mode (legacy)
             platform_credentials = config.get("platform_credentials", {})
