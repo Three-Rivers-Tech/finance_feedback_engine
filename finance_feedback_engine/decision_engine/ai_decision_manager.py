@@ -418,7 +418,7 @@ class AIDecisionManager:
             prompt_chars,
             bool(failed),
         )
-        return {"case": case, "failed": failed, "elapsed_s": elapsed_s}
+        return {"case": case, "failed": failed, "elapsed_s": elapsed_s, "prompt_chars": prompt_chars}
 
     def _truncate_for_judge(self, reasoning: Optional[str]) -> str:
         if not reasoning:
@@ -886,9 +886,15 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
         bull_elapsed = bull_result.get("elapsed_s")
         if bull_elapsed is not None:
             debate_timing["bull_s"] = round(float(bull_elapsed), 4)
+        bull_prompt_chars = bull_result.get("prompt_chars")
+        if bull_prompt_chars is not None:
+            debate_timing["bull_prompt_chars"] = float(bull_prompt_chars)
         bear_elapsed = bear_result.get("elapsed_s")
         if bear_elapsed is not None:
             debate_timing["bear_s"] = round(float(bear_elapsed), 4)
+        bear_prompt_chars = bear_result.get("prompt_chars")
+        if bear_prompt_chars is not None:
+            debate_timing["bear_prompt_chars"] = float(bear_prompt_chars)
         bull_case = bull_result["case"]
         failed_debate_providers.extend(bull_result.get("failed", []))
         bear_case = bear_result["case"]
@@ -906,7 +912,8 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
             # Add judge-specific instructions with bull/bear context
             _timing_started = time.perf_counter()
             judge_prompt = self._build_judge_prompt(prompt, bull_case, bear_case)
-            
+            debate_timing["judge_prompt_chars"] = float(len(judge_prompt))
+
             debate_timing["judge_prompt_build_s"] = round(time.perf_counter() - _timing_started, 4)
             _timing_started = time.perf_counter()
             judge_decision = await self._query_single_provider(
