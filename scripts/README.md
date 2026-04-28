@@ -82,7 +82,7 @@ Runtime garbage-hygiene audit / cleanup helper.
 Notes:
 - default mode is non-destructive audit
 - reports Docker image/cache/volume churn and runtime artifact footprints
-- data/decision retention is preview-only in the current revision
+- `--apply` enables operator-approved cleanup for the script's current in-scope targets
 
 ## Backup & Recovery
 

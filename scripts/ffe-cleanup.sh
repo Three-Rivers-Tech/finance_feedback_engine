@@ -5,7 +5,12 @@
 # Usage:
 #   ./scripts/ffe-cleanup.sh            # audit only (default)
 #   ./scripts/ffe-cleanup.sh --dry-run  # explicit audit / preview
-#   ./scripts/ffe-cleanup.sh --apply    # perform safe cleanup actions
+#   ./scripts/ffe-cleanup.sh --apply    # operator-approved cleanup
+#
+# Current scope:
+# - --apply can prune build cache, dangling images, old tagged images, dangling volumes,
+#   exited manual containers, old decision files, old .bak files, stale misc data files,
+#   and scratch/worktree directories.
 
 set -euo pipefail
 
@@ -48,8 +53,27 @@ DANGLING_COUNT=$(docker images -f dangling=true -q | wc -l | tr -d ' ')
 log "Dangling image count: $DANGLING_COUNT"
 log "Top dangling images by size:"
 docker images --filter dangling=true --format '  {{.ID}} {{.Repository}}:{{.Tag}} {{.Size}} {{.CreatedSince}}' | head -20 || true
+OLD_TAGGED_IMAGES=$(docker images --format '{{.ID}} {{.Repository}}:{{.Tag}} {{.CreatedSince}}' \
+  | grep -v 'finance_feedback_engine-backend:latest' \
+  | grep -v 'postgres:16-alpine' \
+  | grep -v '<none>' \
+  | grep -E 'weeks|months' \
+  | awk '{print $1}' || true)
+OLD_TAGGED_COUNT=$(printf '%s\n' "$OLD_TAGGED_IMAGES" | sed '/^$/d' | wc -l | tr -d ' ')
+log "Old tagged image candidates (weeks|months, excluding current backend/postgres): $OLD_TAGGED_COUNT"
 if [[ "$DANGLING_COUNT" != "0" ]]; then
   run_or_preview "Prune dangling Docker images" docker image prune -f
+fi
+if [[ "$OLD_TAGGED_COUNT" != "0" ]]; then
+  if $APPLY; then
+    log "Removing old tagged images..."
+    while IFS= read -r image_id; do
+      [[ -z "$image_id" ]] && continue
+      docker rmi -f "$image_id" 2>/dev/null || true
+    done <<< "$OLD_TAGGED_IMAGES"
+  else
+    log "[AUDIT] Would remove $OLD_TAGGED_COUNT old tagged images"
+  fi
 fi
 
 section "Old / Exited Containers"
@@ -69,11 +93,12 @@ fi
 
 section "Docker Volumes"
 log "Volume inventory:"
-docker volume ls --format '  {{.Name}}' | while read -r vol; do
-  [[ -z "$vol" ]] && continue
-  size=$(docker system df -v 2>/dev/null | awk -v v="$vol" '$1==v {print $(NF)}' | head -1)
-  printf '  %s %s\n' "$vol" "${size:-unknown}"
-done || true
+docker system df -v | awk "
+  /^Local Volumes space usage:/ {in_vols=1; next}
+  /^Build cache usage:/ {in_vols=0}
+  in_vols && /^VOLUME NAME/ {next}
+  in_vols && NF >= 3 {printf \"  %s %s\\n\", \$1, \$NF}
+" || true
 DANGLING_VOLUMES=$(docker volume ls -f dangling=true -q | wc -l | tr -d ' ')
 log "Dangling volume count: $DANGLING_VOLUMES"
 if [[ "$DANGLING_VOLUMES" != "0" ]]; then
@@ -97,15 +122,33 @@ for pair in \
   fi
 done
 
-section "FFE Decision / Data Retention Preview"
+section "FFE Decision / Data Retention"
 DECISIONS_DIR="/home/cmp6510/finance_feedback_engine/data/decisions"
 if [[ -d "$DECISIONS_DIR" ]]; then
   old_decisions=$(find "$DECISIONS_DIR" -name '*.json' -mtime +14 | wc -l | tr -d ' ')
   bak_files=$(find "$DECISIONS_DIR" -name '*.bak' | wc -l | tr -d ' ')
   log "Decision files older than 14 days: $old_decisions"
   log "Decision backup (.bak) files: $bak_files"
-  log "Data cleanup is intentionally preview-only in this script revision"
+  if [[ "$old_decisions" != "0" ]]; then
+    run_or_preview "Remove decision files older than 14 days" find "$DECISIONS_DIR" -name '*.json' -mtime +14 -delete
+  fi
+  if [[ "$bak_files" != "0" ]]; then
+    run_or_preview "Remove decision backup (.bak) files" find "$DECISIONS_DIR" -name '*.bak' -delete
+  fi
 fi
+
+section "Misc Data Retention"
+for subdir in crash_dumps exports dlq training_logs; do
+  target="/home/cmp6510/finance_feedback_engine/data/$subdir"
+  if [[ -d "$target" ]]; then
+    size=$(du -sh "$target" 2>/dev/null | awk '{print $1}')
+    count=$(find "$target" -type f -mtime +30 | wc -l | tr -d ' ')
+    log "$subdir: $size total, $count files older than 30 days"
+    if [[ "$count" != "0" ]]; then
+      run_or_preview "Remove $subdir files older than 30 days" find "$target" -type f -mtime +30 -delete
+    fi
+  fi
+done
 
 section "Scratch / Worktree Cleanup"
 for d in /home/cmp6510/finance_feedback_engine_cov_* /home/cmp6510/finance_feedback_engine_scratch_* /home/cmp6510/finance_feedback_engine_observability_*; do
