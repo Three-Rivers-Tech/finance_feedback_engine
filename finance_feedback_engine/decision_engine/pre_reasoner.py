@@ -283,34 +283,32 @@ def build_pre_reason_prompt(
             if streak:
                 perf_section += f", {streak.get('streak_type', '')} streak: {streak.get('streak_count', 0)}"
 
-    prompt = f"""You are a market analyst. Quickly assess this market and determine if there is an actionable trading opportunity.
+    # Keep the pre-reason prompt compact so the raw local model can decide
+    # quickly. Missing secondary fields are safely defaulted by the parser.
+    prompt = f"""You are a fast market triage analyst. Return ONLY compact valid JSON.
 
-MARKET DATA:
-Price: ${price:,.2f} | High: ${high:,.2f} | Low: ${low:,.2f}
-RSI: {rsi} | Trend: {trend} | Volume: {volume:,.0f} | Volatility: {volatility}
-Multi-TF: {mtf_consensus} (score: {mtf_score:.1f}) — {tf_summary}
+MARKET:
+price=${price:,.2f}, high=${high:,.2f}, low=${low:,.2f}, rsi={rsi}, trend={trend}, volume={volume:,.0f}, volatility={volatility}
+multi_tf={mtf_consensus}, score={mtf_score:.1f}, directions={tf_summary or 'none'}
+position={pos_section}{perf_section}
 
-POSITION: {pos_section}
-{perf_section}
-
-TASK: Assess the market and return a structured JSON brief. Be fast and decisive.
-Focus on: Is there a clear signal? What's the key question? Should the trading council even convene?
-
-If the market is dead/ranging with no catalyst and no position, say actionable=false.
-If there's a position that needs attention or a clear directional signal, say actionable=true.
+TASK:
+Decide if there is a clear actionable setup right now or if the trading council should be skipped.
+- If the market is dead/ranging with no catalyst and no position, set actionable=false.
+- If there is a position that needs attention or a clear directional setup, set actionable=true.
+- Keep reasoning very short.
+- Keep key_question short.
 
 Return ONLY valid JSON with these keys:
 {{"regime": "trending_up|trending_down|ranging|volatile|dead",
   "regime_confidence": 0-100,
-  "key_support": price_number, "key_resistance": price_number,
   "momentum": "bullish|bearish|neutral|mixed",
-  "momentum_detail": "one sentence",
   "volatility_percentile": 0-100,
   "volume_context": "high|normal|low|thin",
   "actionable": true/false,
-  "skip_reason": "..." or null,
-  "key_question": "the one question for the council",
-  "reasoning": "2-3 sentence summary",
+  "skip_reason": "short string" or null,
+  "key_question": "short string",
+  "reasoning": "one short sentence"
 }}"""
 
     return prompt
