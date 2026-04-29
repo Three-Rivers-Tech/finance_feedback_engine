@@ -888,13 +888,13 @@ Data Quality: <good|degraded|stale>
             debate_timing["bull_s"] = round(float(bull_elapsed), 4)
         bull_prompt_chars = bull_result.get("prompt_chars")
         if bull_prompt_chars is not None:
-            debate_timing["bull_prompt_chars"] = float(bull_prompt_chars)
+            debate_timing["bull_prompt_chars"] = int(bull_prompt_chars)
         bear_elapsed = bear_result.get("elapsed_s")
         if bear_elapsed is not None:
             debate_timing["bear_s"] = round(float(bear_elapsed), 4)
         bear_prompt_chars = bear_result.get("prompt_chars")
         if bear_prompt_chars is not None:
-            debate_timing["bear_prompt_chars"] = float(bear_prompt_chars)
+            debate_timing["bear_prompt_chars"] = int(bear_prompt_chars)
         bull_case = bull_result["case"]
         failed_debate_providers.extend(bull_result.get("failed", []))
         bear_case = bear_result["case"]
