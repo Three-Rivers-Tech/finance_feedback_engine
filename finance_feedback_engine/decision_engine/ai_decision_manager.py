@@ -418,7 +418,7 @@ class AIDecisionManager:
             prompt_chars,
             bool(failed),
         )
-        return {"case": case, "failed": failed, "elapsed_s": elapsed_s}
+        return {"case": case, "failed": failed, "elapsed_s": elapsed_s, "prompt_chars": prompt_chars}
 
     def _truncate_for_judge(self, reasoning: Optional[str]) -> str:
         if not reasoning:
@@ -806,9 +806,10 @@ Confidence calibration:
 - 70-79 = borderline or incomplete setup; below the intended strict judged-open entry bar
 - 60-69 = weak/speculative lean; monitor is usually better than acting now
 - 0-59 = non-actionable, degraded, stale, or HOLD-quality setup
+- Operational anchor: 80-89 should usually map to Actionability=actionable_now; 70-79 to monitor; 0-59 to no_trade or HOLD-quality setups.
 - Do not use 75 as a generic synonym for "high confidence".
 
-In reasoning, use this exact mini-structure, keeping each line short and concrete:
+Reasoning (concise — no extra sections, no long prose):
 Thesis: <one short bullish thesis>
 Actionability: <actionable_now|monitor|no_trade>
 Trend Alignment: <aligned|countertrend|mixed>
@@ -818,7 +819,6 @@ Top Evidence:
 Major Risk: <short biggest reason the bullish case could fail>
 Thesis Breaker: <short invalidating condition>
 Data Quality: <good|degraded|stale>
-Keep the total reasoning concise. Do not add extra sections or long prose.
 """
 
         _bear_prompt_suffix = f"""
@@ -858,9 +858,10 @@ Confidence calibration:
 - 70-79 = borderline or incomplete setup; below the intended strict judged-open entry bar
 - 60-69 = weak/speculative lean; monitor is usually better than acting now
 - 0-59 = non-actionable, degraded, stale, or HOLD-quality setup
+- Operational anchor: 80-89 should usually map to Actionability=actionable_now; 70-79 to monitor; 0-59 to no_trade or HOLD-quality setups.
 - Do not use 75 as a generic synonym for "high confidence".
 
-In reasoning, use this exact mini-structure, keeping each line short and concrete:
+Reasoning (concise — no extra sections, no long prose):
 Thesis: <one short bearish thesis>
 Actionability: <actionable_now|monitor|no_trade>
 Trend Alignment: <aligned|countertrend|mixed>
@@ -870,7 +871,6 @@ Top Evidence:
 Major Risk: <short biggest reason the bearish case could fail>
 Thesis Breaker: <short invalidating condition>
 Data Quality: <good|degraded|stale>
-Keep the total reasoning concise. Do not add extra sections or long prose.
 """
 
         _debate_parallel_started = time.perf_counter()
@@ -886,9 +886,15 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
         bull_elapsed = bull_result.get("elapsed_s")
         if bull_elapsed is not None:
             debate_timing["bull_s"] = round(float(bull_elapsed), 4)
+        bull_prompt_chars = bull_result.get("prompt_chars")
+        if bull_prompt_chars is not None:
+            debate_timing["bull_prompt_chars"] = int(bull_prompt_chars)
         bear_elapsed = bear_result.get("elapsed_s")
         if bear_elapsed is not None:
             debate_timing["bear_s"] = round(float(bear_elapsed), 4)
+        bear_prompt_chars = bear_result.get("prompt_chars")
+        if bear_prompt_chars is not None:
+            debate_timing["bear_prompt_chars"] = int(bear_prompt_chars)
         bull_case = bull_result["case"]
         failed_debate_providers.extend(bull_result.get("failed", []))
         bear_case = bear_result["case"]
@@ -906,7 +912,8 @@ Keep the total reasoning concise. Do not add extra sections or long prose.
             # Add judge-specific instructions with bull/bear context
             _timing_started = time.perf_counter()
             judge_prompt = self._build_judge_prompt(prompt, bull_case, bear_case)
-            
+            debate_timing["judge_prompt_chars"] = float(len(judge_prompt))
+
             debate_timing["judge_prompt_build_s"] = round(time.perf_counter() - _timing_started, 4)
             _timing_started = time.perf_counter()
             judge_decision = await self._query_single_provider(
