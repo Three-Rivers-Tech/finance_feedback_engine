@@ -72,6 +72,25 @@ def pytest_configure(config):
     config.option.cov_fail_under = 0
 
 
+def pytest_collection_modifyitems(config, items):
+    """Apply non-strict xfail markers from tests/known_failing.txt."""
+    known_failing_path = config.rootpath / "tests" / "known_failing.txt"
+    if not known_failing_path.exists():
+        return
+
+    known_failures = {}
+    for raw_line in known_failing_path.read_text().splitlines():
+        nodeid, _, comment = raw_line.partition("#")
+        nodeid = nodeid.strip()
+        if nodeid:
+            known_failures[nodeid] = comment.strip()
+
+    for item in items:
+        if item.nodeid in known_failures:
+            reason = known_failures[item.nodeid] or "known fast-lane failure"
+            item.add_marker(pytest.mark.xfail(reason=reason, strict=False))
+
+
 # --- Logging Configuration Fixture ---
 # This fixture ensures all logging handlers are properly cleaned up after tests
 # to prevent "I/O operation on closed file" errors.

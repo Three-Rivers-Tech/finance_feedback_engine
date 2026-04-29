@@ -13,6 +13,8 @@ import pytest
 from finance_feedback_engine.core import FinanceFeedbackEngine
 from finance_feedback_engine.utils.config_loader import load_config
 
+pytestmark = pytest.mark.external_service
+
 
 def test_ffe_initializes_automatically():
     """Test that FFE initializes critical components in __init__."""

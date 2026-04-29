@@ -393,7 +393,7 @@ Key Question: Should we adjust the existing long position given the overbought R
 
 
 def test_role_prompts_request_concise_reasoning_and_two_evidence_points():
-    source = Path('/home/cmp6510/finance_feedback_engine/finance_feedback_engine/decision_engine/ai_decision_manager.py').read_text()
+    source = (Path(__file__).resolve().parents[2] / 'finance_feedback_engine/decision_engine/ai_decision_manager.py').read_text()
 
     assert 'keeping each line short and concrete' in source
     assert 'Keep the total reasoning concise. Do not add extra sections or long prose.' in source

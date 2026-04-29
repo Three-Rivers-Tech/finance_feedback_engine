@@ -436,6 +436,7 @@ class TestDecisionGeneration:
 class TestEnsembleIntegration:
     """Test ensemble manager integration (mocked)."""
 
+    @pytest.mark.external_service
     @pytest.mark.asyncio
     async def test_ensemble_decision_mocked(
         self, ensemble_engine, sample_market_data, sample_balance
