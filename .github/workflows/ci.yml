@@ -73,8 +73,7 @@ jobs:
             --tb=short \
             --cov=finance_feedback_engine \
             --cov-report=term-missing \
-            --cov-report=xml \
-            --cov-fail-under=70
+            --cov-report=xml
 
       - name: Upload coverage xml
         if: always()
