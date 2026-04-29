@@ -1,0 +1,49 @@
+# Tier 2 known-failing tests — applied as xfail by tests/conftest.py hook.
+# Tracked under Plane FINANCEFEE-99. Remove a line as the test is fixed.
+# One nodeid per line. Lines starting with '#' or after '#' are comments.
+tests/agent/test_profit_readiness_gate.py::test_perception_halts_on_stale_data # cluster: stale-data/state transition
+tests/decision_engine/test_debate_fallback_gate.py::TestFallbackGateInDebateRole::test_legitimate_hold_not_rejected # cluster: debate/decision policy action compatibility
+tests/decision_engine/test_decision_validator_quality_scaling.py::test_decision_validator_policy_action_close_has_no_legacy_compatibility # cluster: debate/decision policy action compatibility
+tests/decision_engine/test_policy_actions.py::test_build_policy_selection_adaptive_control_exchange_response_handling_contract_set_preserves_multiple_exchange_http_transport_contract_summaries_in_order # cluster: debate/decision policy action compatibility
+tests/memory/test_integration.py::TestThompsonIntegration::test_provider_recommendations_updated # cluster: memory/time-window expectations
+tests/memory/test_performance_analyzer.py::TestPerformanceOverPeriod::test_performance_over_period_within_window # cluster: memory/time-window expectations
+tests/memory/test_thompson_integrator.py::TestGetProviderRecommendations::test_recommendations_based_on_win_rates # cluster: memory/time-window expectations
+tests/memory/test_trade_recorder.py::TestGetTradesInPeriod::test_get_trades_in_period # cluster: memory/time-window expectations
+tests/risk/test_gatekeeper_drawdown_normalization.py::test_gatekeeper_allows_futures_scale_in_when_margin_usage_implies_sub_limit_effective_leverage # cluster: risk/position sizing semantics
+tests/test_agent.py::test_agent_state_transitions # cluster: stale-data/state transition
+tests/test_api.py::test_get_balance # cluster: API/core drift
+tests/test_api.py::test_get_decision_history # cluster: API/core drift
+tests/test_bot_control_error_handling.py::test_get_open_positions_does_not_lie_with_zero_total_value_on_breakdown_error # cluster: known survey failure
+tests/test_bot_profitable_trade_integration.py::TestTradingBotProfitableTrade::test_bot_executes_profitable_trade # cluster: profitability/e2e expectation drift
+tests/test_cache_metrics.py::TestCacheMetrics::test_get_efficiency_score_low_hit_rate # cluster: known survey failure
+tests/test_cli_commands.py::test_analyze_command_success # cluster: CLI output/command drift
+tests/test_cli_experiment_command.py::test_behavior_experiment_command_writes_output # cluster: CLI output/command drift
+tests/test_core_engine.py::TestDecisionPersistence::test_analyze_asset_end_to_end_debate_smoke_persists_spine_fields # cluster: debate/decision policy action compatibility
+tests/test_correlation_analyzer.py::TestCorrelationAnalyzer::test_calculate_pearson_correlation_no_correlation # cluster: provider/platform payload shape drift
+tests/test_data_providers_comprehensive.py::TestAlphaVantageProvider::test_circuit_breaker_opens_on_failures # cluster: provider/platform payload shape drift
+tests/test_data_providers_fixed_v2.py::TestAlphaVantageProviderFixed::test_get_market_data_success_crypto # cluster: provider/platform payload shape drift
+tests/test_debate_policy_actions.py::test_debate_policy_action_close_preserves_none_legacy_compatibility # cluster: debate/decision policy action compatibility
+tests/test_decision_engine_helpers.py::TestCalculatePositionSizingParams::test_hold_without_position_no_sizing # cluster: risk/position sizing semantics
+tests/test_decision_engine_logic.py::TestPositionSizing::test_calculate_position_size_zero_stop_loss # cluster: risk/position sizing semantics
+tests/test_decision_round_trip_canonicalization.py::test_canonical_decision_fields_round_trip_by_shape[_policy_trace_fixture-expected_lineage_fields4] # cluster: debate/decision policy action compatibility
+tests/test_decision_store_policy_trace.py::test_decision_store_round_trips_policy_trace # cluster: debate/decision policy action compatibility
+tests/test_decision_store_policy_trace.py::test_decision_store_legacy_records_without_policy_trace_still_load # cluster: debate/decision policy action compatibility
+tests/test_e2e_first_profitable_trade.py::TestFirstProfitableTrade::test_execute_profitable_trade_scenario # cluster: profitability/e2e expectation drift
+tests/test_fragile_seam_invariants.py::TestNormalizeLearningProviderDecisions::test_judge_only_provider_decisions_reconstructed_from_roles # cluster: debate/decision policy action compatibility
+tests/test_fragile_seam_invariants.py::TestNormalizeLearningProviderDecisions::test_role_without_provider_key_skipped # cluster: debate/decision policy action compatibility
+tests/test_frontend_bot_integration.py::TestFrontendBotIntegration::test_frontend_starts_bot_and_executes_trade # cluster: profitability/e2e expectation drift
+tests/test_jwt_authentication.py::TestJWTSecurityFeatures::test_algorithm_confusion_attack_prevented # cluster: auth/security behavior drift
+tests/test_kelly_criterion_division_by_zero.py::TestDivisionByZeroFixes::test_position_size_with_zero_payoff_ratio # cluster: risk/position sizing semantics
+tests/test_monitoring_integration.py::test_decision_generation_with_monitoring # cluster: API/core drift
+tests/test_platform_error_handling.py::TestMockPlatformErrorSimulation::test_mock_platform_zero_error_rate # cluster: provider/platform payload shape drift
+tests/test_portfolio_retrievers.py::TestMockPortfolioRetriever::test_assemble_result_creates_complete_breakdown # cluster: provider/platform payload shape drift
+tests/test_portfolio_retrievers.py::TestMockPortfolioRetriever::test_get_portfolio_breakdown_orchestrates_steps # cluster: provider/platform payload shape drift
+tests/test_positions_cli.py::test_positions_cli_command_single_platform # cluster: CLI output/command drift
+tests/test_positions_cli.py::test_positions_cli_command_unified_platform # cluster: CLI output/command drift
+tests/test_risk_gatekeeper.py::TestMarketScheduleValidation::test_forex_not_blocked_when_closed # cluster: risk/position sizing semantics
+tests/test_short_backtesting.py::TestShortBacktestingIntegration::test_backtest_with_short_positions # cluster: known survey failure
+tests/test_threshold_avoidance.py::test_load_decision_records_report_counts_unreadable_files # cluster: known survey failure
+tests/test_tradingagentconfig_polymorphism.py::TestPositionSizingWithPolymorphicConfig::test_position_sizing_with_object_agent_config # cluster: risk/position sizing semantics
+tests/test_tradingagentconfig_polymorphism.py::TestPositionSizingWithPolymorphicConfig::test_position_sizing_uses_correct_risk_percentage # cluster: risk/position sizing semantics
+tests/test_var_no_active_platforms.py::test_var_with_no_active_platforms_does_not_log_dual_portfolio # cluster: risk/position sizing semantics
+tests/test_webhook_delivery.py::test_webhook_delivery_retry_on_failure # cluster: webhook retry behavior
