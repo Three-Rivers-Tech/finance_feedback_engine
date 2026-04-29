@@ -1,4 +1,8 @@
+import pytest
+
 from finance_feedback_engine.decision_engine.local_llm_provider import LocalLLMProvider
+
+pytestmark = pytest.mark.external_service
 
 
 class DummyClient:
