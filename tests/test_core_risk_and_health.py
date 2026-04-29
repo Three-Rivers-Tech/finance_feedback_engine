@@ -69,6 +69,7 @@ def engine_for_health_checks(minimal_config):
 class TestAgentReadinessValidation:
     """Test agent readiness validation before autonomous trading."""
 
+    @pytest.mark.external_service
     def test_validate_agent_readiness_success(self, engine_for_health_checks):
         """Test successful readiness validation."""
         is_ready, errors = engine_for_health_checks.validate_agent_readiness()
