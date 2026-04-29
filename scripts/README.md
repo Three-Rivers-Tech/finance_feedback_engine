@@ -73,12 +73,15 @@ Deploy the application to production.
 ```
 
 ### `ffe-cleanup.sh`
+
 Runtime garbage-hygiene audit / cleanup helper.
+
 ```bash
 ./ffe-cleanup.sh          # audit-only preview (default)
 ./ffe-cleanup.sh --dry-run
 ./ffe-cleanup.sh --apply  # operator-approved cleanup
 ```
+
 Notes:
 - default mode is non-destructive audit
 - reports Docker image/cache/volume churn and runtime artifact footprints

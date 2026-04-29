@@ -14,6 +14,10 @@
 
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+DATA_DIR="$REPO_ROOT/data"
+
 MODE="audit"
 for arg in "$@"; do
   case "$arg" in
@@ -107,10 +111,10 @@ fi
 
 section "FFE Runtime Artifacts"
 for pair in \
-  "/home/cmp6510/finance_feedback_engine/logs logs" \
-  "/home/cmp6510/finance_feedback_engine/data data" \
-  "/home/cmp6510/finance_feedback_engine/backups backups" \
-  "/home/cmp6510/finance_feedback_engine/build build"; do
+  "$REPO_ROOT/logs logs" \
+  "$DATA_DIR data" \
+  "$REPO_ROOT/backups backups" \
+  "$REPO_ROOT/build build"; do
   target=${pair%% *}
   label=${pair##* }
   if [[ -d "$target" ]]; then
@@ -123,7 +127,7 @@ for pair in \
 done
 
 section "FFE Decision / Data Retention"
-DECISIONS_DIR="/home/cmp6510/finance_feedback_engine/data/decisions"
+DECISIONS_DIR="$DATA_DIR/decisions"
 if [[ -d "$DECISIONS_DIR" ]]; then
   old_decisions=$(find "$DECISIONS_DIR" -name '*.json' -mtime +14 | wc -l | tr -d ' ')
   bak_files=$(find "$DECISIONS_DIR" -name '*.bak' | wc -l | tr -d ' ')
@@ -139,7 +143,7 @@ fi
 
 section "Misc Data Retention"
 for subdir in crash_dumps exports dlq training_logs; do
-  target="/home/cmp6510/finance_feedback_engine/data/$subdir"
+  target="$DATA_DIR/$subdir"
   if [[ -d "$target" ]]; then
     size=$(du -sh "$target" 2>/dev/null | awk '{print $1}')
     count=$(find "$target" -type f -mtime +30 | wc -l | tr -d ' ')
@@ -151,6 +155,7 @@ for subdir in crash_dumps exports dlq training_logs; do
 done
 
 section "Scratch / Worktree Cleanup"
+# These scratch/worktree globs are intentionally absolute host-level paths rather than repo-relative.
 for d in /home/cmp6510/finance_feedback_engine_cov_* /home/cmp6510/finance_feedback_engine_scratch_* /home/cmp6510/finance_feedback_engine_observability_*; do
   if [[ -d "$d" ]]; then
     size=$(du -sh "$d" 2>/dev/null | awk '{print $1}')
