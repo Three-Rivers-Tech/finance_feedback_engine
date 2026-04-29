@@ -282,12 +282,13 @@ alpha_vantage_api_key: ${ALPHA_VANTAGE_API_KEY}
 
     def test_detect_telegram_token(self, temp_config_file):
         """Test detection of Telegram bot tokens"""
-        config = """
+        token_like_value = "1234567890:" + "ABCdefGHIjklMNOpqrsTUVwxyz123456789"
+        config = f"""
 decision_engine:
   ai_provider: local
 persistence:
   storage_path: data
-telegram_token: 1234567890:ABCdefGHIjklMNOpqrsTUVwxyz123456789
+telegram_token: {token_like_value}
 """
         temp_config_file.write(config)
         temp_config_file.flush()

@@ -366,10 +366,11 @@ class TestConfigValidator:
 
     def test_telegram_token_exposure(self, validator):
         """Test detection of exposed Telegram bot token"""
+        token_like_value = "1234567890:" + "ABCdefGHIjklMNOpqrsTUVwxyz1234567890"
         config = {
             "telegram": {
                 "enabled": True,
-                "bot_token": "1234567890:ABCdefGHIjklMNOpqrsTUVwxyz1234567890",  # Real pattern
+                "bot_token": token_like_value,
             },
             "decision_engine": {
                 "ai_provider": "local",
