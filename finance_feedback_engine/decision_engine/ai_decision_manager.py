@@ -806,9 +806,10 @@ Confidence calibration:
 - 70-79 = borderline or incomplete setup; below the intended strict judged-open entry bar
 - 60-69 = weak/speculative lean; monitor is usually better than acting now
 - 0-59 = non-actionable, degraded, stale, or HOLD-quality setup
+- Operational anchor: 80-89 should usually map to Actionability=actionable_now; 70-79 to monitor; 0-59 to no_trade or HOLD-quality setups.
 - Do not use 75 as a generic synonym for "high confidence".
 
-In reasoning, use this exact mini-structure, keeping each line short and concrete:
+Reasoning (concise — no extra sections, no long prose):
 Thesis: <one short bullish thesis>
 Actionability: <actionable_now|monitor|no_trade>
 Trend Alignment: <aligned|countertrend|mixed>
@@ -818,7 +819,6 @@ Top Evidence:
 Major Risk: <short biggest reason the bullish case could fail>
 Thesis Breaker: <short invalidating condition>
 Data Quality: <good|degraded|stale>
-Keep the total reasoning concise. Do not add extra sections or long prose.
 """
 
         _bear_prompt_suffix = f"""
@@ -858,9 +858,10 @@ Confidence calibration:
 - 70-79 = borderline or incomplete setup; below the intended strict judged-open entry bar
 - 60-69 = weak/speculative lean; monitor is usually better than acting now
 - 0-59 = non-actionable, degraded, stale, or HOLD-quality setup
+- Operational anchor: 80-89 should usually map to Actionability=actionable_now; 70-79 to monitor; 0-59 to no_trade or HOLD-quality setups.
 - Do not use 75 as a generic synonym for "high confidence".
 
-In reasoning, use this exact mini-structure, keeping each line short and concrete:
+Reasoning (concise — no extra sections, no long prose):
 Thesis: <one short bearish thesis>
 Actionability: <actionable_now|monitor|no_trade>
 Trend Alignment: <aligned|countertrend|mixed>
@@ -870,7 +871,6 @@ Top Evidence:
 Major Risk: <short biggest reason the bearish case could fail>
 Thesis Breaker: <short invalidating condition>
 Data Quality: <good|degraded|stale>
-Keep the total reasoning concise. Do not add extra sections or long prose.
 """
 
         _debate_parallel_started = time.perf_counter()

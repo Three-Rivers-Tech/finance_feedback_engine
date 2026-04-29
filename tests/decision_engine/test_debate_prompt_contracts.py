@@ -35,6 +35,8 @@ def test_debate_prompts_include_structured_reasoning_contracts():
     assert 'Top Evidence:' in bull_prompt
     assert 'Data Quality:' in bull_prompt
     assert 'Confidence calibration:' in bull_prompt
+    assert 'Operational anchor: 80-89 should usually map to Actionability=actionable_now; 70-79 to monitor; 0-59 to no_trade or HOLD-quality setups.' in bull_prompt
+    assert 'Reasoning (concise — no extra sections, no long prose):' in bull_prompt
     assert 'Do not use 75 as a generic synonym for "high confidence".' in bull_prompt
 
     assert 'Thesis:' in bear_prompt
@@ -42,6 +44,8 @@ def test_debate_prompts_include_structured_reasoning_contracts():
     assert 'Trend Alignment:' in bear_prompt
     assert 'Top Evidence:' in bear_prompt
     assert 'Data Quality:' in bear_prompt
+    assert 'Operational anchor: 80-89 should usually map to Actionability=actionable_now; 70-79 to monitor; 0-59 to no_trade or HOLD-quality setups.' in bear_prompt
+    assert 'Reasoning (concise — no extra sections, no long prose):' in bear_prompt
 
     assert 'MANDATORY HOLD CONDITIONS' in judge_prompt
     assert 'HOLD is an active decision, not the default fallback' in judge_prompt
@@ -211,6 +215,7 @@ LONG TAIL SECTION:
     assert "ALLOWED POLICY ACTIONS:" in compact
     assert "MARKET DATA:" in compact
     assert "MARKET BRIEF:" in compact
+    assert "RISK MANAGEMENT & POSITION CONTEXT:" not in compact
     assert len(compact) < len(full_prompt)
 
 
@@ -321,6 +326,8 @@ Open positions: none
     assert "MULTI-TIMEFRAME TREND ANALYSIS:" in compact
     assert "RISK MANAGEMENT & POSITION CONTEXT:" in compact
     assert "MARKET BRIEF:" in compact
+    assert "POSITION STATE:" not in compact
+    assert "MARKET DATA:" not in compact
     assert len(compact) >= 300
     assert len(compact) <= 1200
 
@@ -395,8 +402,8 @@ Key Question: Should we adjust the existing long position given the overbought R
 def test_role_prompts_request_concise_reasoning_and_two_evidence_points():
     source = (Path(__file__).resolve().parents[2] / 'finance_feedback_engine/decision_engine/ai_decision_manager.py').read_text()
 
-    assert 'keeping each line short and concrete' in source
-    assert 'Keep the total reasoning concise. Do not add extra sections or long prose.' in source
+    assert 'Reasoning (concise — no extra sections, no long prose):' in source
+    assert 'Operational anchor: 80-89 should usually map to Actionability=actionable_now; 70-79 to monitor; 0-59 to no_trade or HOLD-quality setups.' in source
     assert '1. <best bullish evidence>' in source
     assert '2. <second bullish evidence>' in source
     assert '3. <third bullish evidence>' not in source
