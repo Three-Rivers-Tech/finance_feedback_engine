@@ -424,9 +424,9 @@ class AIDecisionManager:
         if not reasoning:
             return "No reasoning provided"
         compact = " ".join(str(reasoning).split())
-        if len(compact) <= 500:
+        if len(compact) <= 350:
             return compact
-        return compact[:497] + "..."
+        return compact[:347] + "..."
 
     def _format_case_for_judge(self, side: str, case: Optional[Dict[str, Any]]) -> str:
         if not case:
@@ -806,7 +806,6 @@ Confidence calibration:
 - 70-79 = borderline or incomplete setup; below the intended strict judged-open entry bar
 - 60-69 = weak/speculative lean; monitor is usually better than acting now
 - 0-59 = non-actionable, degraded, stale, or HOLD-quality setup
-- Operational anchor: 80-89 should usually map to Actionability=actionable_now; 70-79 to monitor; 0-59 to no_trade or HOLD-quality setups.
 - Do not use 75 as a generic synonym for "high confidence".
 
 Reasoning (concise — no extra sections, no long prose):
@@ -858,7 +857,6 @@ Confidence calibration:
 - 70-79 = borderline or incomplete setup; below the intended strict judged-open entry bar
 - 60-69 = weak/speculative lean; monitor is usually better than acting now
 - 0-59 = non-actionable, degraded, stale, or HOLD-quality setup
-- Operational anchor: 80-89 should usually map to Actionability=actionable_now; 70-79 to monitor; 0-59 to no_trade or HOLD-quality setups.
 - Do not use 75 as a generic synonym for "high confidence".
 
 Reasoning (concise — no extra sections, no long prose):

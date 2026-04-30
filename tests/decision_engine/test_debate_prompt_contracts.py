@@ -35,7 +35,7 @@ def test_debate_prompts_include_structured_reasoning_contracts():
     assert 'Top Evidence:' in bull_prompt
     assert 'Data Quality:' in bull_prompt
     assert 'Confidence calibration:' in bull_prompt
-    assert 'Operational anchor: 80-89 should usually map to Actionability=actionable_now; 70-79 to monitor; 0-59 to no_trade or HOLD-quality setups.' in bull_prompt
+    assert 'Operational anchor:' not in bull_prompt
     assert 'Reasoning (concise — no extra sections, no long prose):' in bull_prompt
     assert 'Do not use 75 as a generic synonym for "high confidence".' in bull_prompt
 
@@ -44,7 +44,7 @@ def test_debate_prompts_include_structured_reasoning_contracts():
     assert 'Trend Alignment:' in bear_prompt
     assert 'Top Evidence:' in bear_prompt
     assert 'Data Quality:' in bear_prompt
-    assert 'Operational anchor: 80-89 should usually map to Actionability=actionable_now; 70-79 to monitor; 0-59 to no_trade or HOLD-quality setups.' in bear_prompt
+    assert 'Operational anchor:' not in bear_prompt
     assert 'Reasoning (concise — no extra sections, no long prose):' in bear_prompt
 
     assert 'MANDATORY HOLD CONDITIONS' in judge_prompt
@@ -403,7 +403,7 @@ def test_role_prompts_request_concise_reasoning_and_two_evidence_points():
     source = (Path(__file__).resolve().parents[2] / 'finance_feedback_engine/decision_engine/ai_decision_manager.py').read_text()
 
     assert 'Reasoning (concise — no extra sections, no long prose):' in source
-    assert 'Operational anchor: 80-89 should usually map to Actionability=actionable_now; 70-79 to monitor; 0-59 to no_trade or HOLD-quality setups.' in source
+    assert 'Operational anchor:' not in source
     assert '1. <best bullish evidence>' in source
     assert '2. <second bullish evidence>' in source
     assert '3. <third bullish evidence>' not in source
@@ -566,4 +566,46 @@ Market Regime: ranging"""
     assert 'In flat/ranging context, a non-HOLD entry decision must include at least 2 candidate_actions.' in judge_prompt
     assert 'If you choose OPEN_' in judge_prompt
     assert 'do not return a singleton candidate_actions array' in judge_prompt
+
+
+def test_bull_bear_suffix_byte_budget():
+    # Bull/bear suffix length is on the live debate critical path; a budget
+    # guard catches additive prompt drift before it ships.
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    manager.ensemble_manager = type('E', (), {
+        '_is_valid_provider_response': lambda *args, **kwargs: True,
+        'debate_providers': {'bull': 'gemma2:9b', 'bear': 'llama3.1:8b', 'judge': 'deepseek-r1:8b'},
+        'debate_decisions': lambda self, **kwargs: kwargs['judge_decision'],
+    })()
+    manager.ensemble_timeout = 90
+
+    prompts = []
+
+    async def fake_query(provider, prompt, request_label=None, request_timeout_s=None):
+        prompts.append((provider, prompt))
+        return {"action": "HOLD", "policy_action": "HOLD", "candidate_actions": ["HOLD"], "confidence": 50, "reasoning": "ok", "amount": 0}
+
+    manager._query_single_provider = fake_query
+
+    base = 'BASE PROMPT'
+    import asyncio
+    asyncio.run(manager._debate_mode_inference(prompt=base))
+
+    bull_suffix_len = len(prompts[0][1]) - len(base)
+    bear_suffix_len = len(prompts[1][1]) - len(base)
+
+    assert bull_suffix_len <= 2200, f'bull suffix grew to {bull_suffix_len} chars'
+    assert bear_suffix_len <= 2200, f'bear suffix grew to {bear_suffix_len} chars'
+
+
+def test_truncate_for_judge_caps_reasoning_summary():
+    manager = AIDecisionManager.__new__(AIDecisionManager)
+    long_reason = 'evidence ' * 200
+
+    truncated = manager._truncate_for_judge(long_reason)
+
+    assert len(truncated) <= 350
+    assert truncated.endswith('...')
+    assert manager._truncate_for_judge(None) == 'No reasoning provided'
+    assert manager._truncate_for_judge('short reasoning') == 'short reasoning'
 
